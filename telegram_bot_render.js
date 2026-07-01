@@ -59,6 +59,28 @@ async function getAccountDetails(id) {
     }
 }
 
+// Marcar como em uso
+async function marcarEmUso(id) {
+    try {
+        const res = await axios.post(`${API_URL}?action=mark_in_use`, { id });
+        return res.data;
+    } catch (e) {
+        console.error('Erro ao marcar em uso:', e.message);
+        return null;
+    }
+}
+
+// Desmarcar em uso
+async function desmarcarEmUso(id) {
+    try {
+        const res = await axios.post(`${API_URL}?action=mark_not_in_use`, { id });
+        return res.data;
+    } catch (e) {
+        console.error('Erro ao desmarcar:', e.message);
+        return null;
+    }
+}
+
 bot.onText(/\/start/, async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id;
@@ -119,6 +141,7 @@ bot.on('callback_query', async (query) => {
             const dataExp = formatarData(c.expira);
             const dataCria = formatarData(c.criada);
             const dias = calcularDias(c.expira);
+            const emUso = c.in_use ? '✅ SIM' : '❌ NÃO';
             
             const msg = `
 <b>📌 ID:</b> <code>${c.id}</code>
@@ -133,17 +156,30 @@ bot.on('callback_query', async (query) => {
 
 <b>🔌 ATIVAS:</b> ${c.con_ativas}/${c.max_con}
 
+<b>📱 EM USO:</b> ${emUso}
+
 <b>🔗 M3U:</b>
 <code>${c.m3u_url}</code>
             `.trim();
             
+            const botoes = [
+                [
+                    { text: '📋 Copiar', callback_data: `copy|${c.id}` },
+                    { text: '◀️ Voltar', callback_data: `select_server|${c.host}|1` }
+                ]
+            ];
+            
+            // Botão de marcar/desmarcar em uso
+            if (c.in_use) {
+                botoes.push([{ text: '🔴 Marcar como NÃO Usado', callback_data: `toggle_in_use|${c.id}|${c.host}` }]);
+            } else {
+                botoes.push([{ text: '🟢 Marcar como USADO', callback_data: `toggle_in_use|${c.id}|${c.host}` }]);
+            }
+            
             bot.sendMessage(chatId, msg, {
                 parse_mode: 'HTML',
                 reply_markup: {
-                    inline_keyboard: [[
-                        { text: '📋 Copiar', callback_data: `copy|${c.id}` },
-                        { text: '◀️ Voltar', callback_data: `select_server|${c.host}|1` }
-                    ]]
+                    inline_keyboard: botoes
                 }
             });
         }
@@ -156,6 +192,7 @@ bot.on('callback_query', async (query) => {
             const dataExp = formatarData(c.expira);
             const dataCria = formatarData(c.criada);
             const dias = calcularDias(c.expira);
+            const emUso = c.in_use ? 'SIM' : 'NÃO';
             
             const txt = `ID: ${c.id}
 HOST: ${c.host}
@@ -165,9 +202,37 @@ CRIADA: ${dataCria}
 EXPIRA: ${dataExp}
 DIAS: ${dias}
 ATIVAS: ${c.con_ativas}/${c.max_con}
+EM USO: ${emUso}
 M3U: ${c.m3u_url}`;
             
             bot.sendMessage(chatId, `<pre>${txt}</pre>`, { parse_mode: 'HTML' });
+        }
+    } else if (data.startsWith('toggle_in_use|')) {
+        const [, id, host] = data.split('|');
+        const result = await getAccountDetails(id);
+        
+        if (result && result.ok) {
+            const c = result.conta;
+            let updateResult;
+            
+            if (c.in_use) {
+                updateResult = await desmarcarEmUso(id);
+            } else {
+                updateResult = await marcarEmUso(id);
+            }
+            
+            if (updateResult && updateResult.ok) {
+                const novoStatus = c.in_use ? 'NÃO Usado' : 'USADO';
+                bot.answerCallbackQuery(query.id, `✅ Marcado como ${novoStatus}!`, true);
+                
+                // Atualizar a mensagem
+                await bot.editMessageText(
+                    `<b>📌 ID:</b> <code>${id}</code>\n\n✅ <b>Status atualizado com sucesso!</b>\n\nAgora aparecerá no painel.`,
+                    { chat_id: chatId, message_id: query.message.message_id, parse_mode: 'HTML' }
+                );
+            } else {
+                bot.answerCallbackQuery(query.id, '❌ Erro ao atualizar', true);
+            }
         }
     } else if (data.startsWith('page|')) {
         const [, host, page] = data.split('|');
@@ -192,7 +257,8 @@ async function showAccounts(chatId, host, page = 1) {
         const exp = formatarData(c.expira);
         const dias = calcularDias(c.expira);
         const status = dias > 0 ? '✅' : '❌';
-        text += `${status} #${c.id} | ${exp} | ${dias}d\n`;
+        const emUso = c.in_use ? '📱' : '  ';
+        text += `${status} ${emUso} #${c.id} | ${exp} | ${dias}d\n`;
         buttons.push([{ text: `📌 #${c.id} (${dias}d)`, callback_data: `view_account|${c.id}` }]);
     });
     
@@ -206,7 +272,7 @@ async function showAccounts(chatId, host, page = 1) {
 }
 
 bot.onText(/\/ajuda/, (msg) => {
-    bot.sendMessage(msg.chat.id, '📚 <b>AJUDA</b>\n\n/start\n/servidores\n/ajuda', { parse_mode: 'HTML' });
+    bot.sendMessage(msg.chat.id, '📚 <b>AJUDA</b>\n\n/start\n/servidores\n/ajuda\n\n📱 Clique em "Marcar como USADO" para indicar que já está usando a conta.', { parse_mode: 'HTML' });
 });
 
 console.log('✅ Bot aguardando mensagens...');
