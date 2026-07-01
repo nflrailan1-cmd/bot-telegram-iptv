@@ -50,6 +50,26 @@ async function getAccountDetails(id) {
     }
 }
 
+// Formatar data para DD/MM/YYYY
+function formatarData(data) {
+    if (!data) return '-';
+    const d = new Date(data);
+    const dia = String(d.getDate()).padStart(2, '0');
+    const mes = String(d.getMonth() + 1).padStart(2, '0');
+    const ano = d.getFullYear();
+    return `${dia}/${mes}/${ano}`;
+}
+
+// Calcular dias restantes
+function calcularDias(dataExpira) {
+    if (!dataExpira) return 0;
+    const hoje = new Date();
+    const expira = new Date(dataExpira);
+    const diff = expira - hoje;
+    const dias = Math.ceil(diff / (1000 * 60 * 60 * 24));
+    return dias > 0 ? dias : 0;
+}
+
 // ===================== COMANDO: START ======================
 bot.onText(/\/start/, async (msg) => {
     const chatId = msg.chat.id;
@@ -147,11 +167,37 @@ bot.on('callback_query', async (query) => {
         const result = await getAccountDetails(id);
         
         if (result && result.ok) {
-            bot.sendMessage(chatId, result.mensagem, {
+            const conta = result.conta;
+            
+            // Formatar dados melhorados
+            const dataExpira = formatarData(conta.expira);
+            const dataCriada = formatarData(conta.criada);
+            const diasRestantes = calcularDias(conta.expira);
+            
+            let mensagem = `
+<b>📌 ID:</b> <code>${conta.id}</code>
+
+<b>🌐 HOST:</b> <code>${conta.host}</code>
+<b>👤 USER:</b> <code>${conta.username}</code>
+<b>🔑 PASS:</b> <code>${conta.password}</code>
+
+<b>⏱️ CRIADA:</b> ${dataCriada}
+<b>📆 EXPIRA:</b> ${dataExpira}
+<b>⏰ DIAS RESTANTES:</b> <b>${diasRestantes} dias</b>
+
+<b>🔌 CON.ATIVAS:</b> ${conta.con_ativas}/${conta.max_con}
+
+<b>🔗 M3U LINK:</b>
+<code>${conta.m3u_url}</code>
+            `.trim();
+            
+            // Botão para copiar dados
+            bot.sendMessage(chatId, mensagem, {
                 parse_mode: 'HTML',
                 reply_markup: {
                     inline_keyboard: [[
-                        { text: '◀️ Voltar', callback_data: `select_server|${result.conta.host}|1` }
+                        { text: '📋 Copiar Dados', callback_data: `copy_account|${conta.id}` },
+                        { text: '◀️ Voltar', callback_data: `select_server|${conta.host}|1` }
                     ]]
                 }
             });
@@ -160,6 +206,38 @@ bot.on('callback_query', async (query) => {
         }
         
         bot.answerCallbackQuery(query.id);
+        return;
+    }
+    
+    if (data.startsWith('copy_account|')) {
+        const id = data.split('|')[1];
+        const result = await getAccountDetails(id);
+        
+        if (result && result.ok) {
+            const conta = result.conta;
+            const dataCriada = formatarData(conta.criada);
+            const dataExpira = formatarData(conta.expira);
+            const diasRestantes = calcularDias(conta.expira);
+            
+            // Formatar dados para cópia
+            const dadosCopia = `ID: ${conta.id}
+HOST: ${conta.host}
+USER: ${conta.username}
+PASS: ${conta.password}
+CRIADA: ${dataCriada}
+EXPIRA: ${dataExpira}
+DIAS RESTANTES: ${diasRestantes} dias
+CONEXÕES: ${conta.con_ativas}/${conta.max_con}
+M3U: ${conta.m3u_url}`;
+            
+            bot.sendMessage(chatId, `<pre>${dadosCopia}</pre>`, {
+                parse_mode: 'HTML'
+            });
+            
+            bot.answerCallbackQuery(query.id, '✅ Dados prontos para copiar!', true);
+        } else {
+            bot.answerCallbackQuery(query.id, '❌ Erro ao copiar dados', true);
+        }
         return;
     }
     
@@ -186,19 +264,19 @@ async function showAccounts(chatId, host, page = 1) {
     
     let text = `🌐 <b>SERVIDOR:</b> ${host}\n`;
     text += `📊 Página ${result.page} de ${result.pages}\n\n`;
+    text += `<b>CONTAS DISPONÍVEIS:</b>\n\n`;
     
     const buttons = [];
     
     result.contas.forEach((conta, index) => {
-        const expira = conta.expira ? new Date(conta.expira).toLocaleDateString('pt-BR') : '-';
-        const status = conta.dias_restantes > 0 ? '✅' : '❌';
+        const dataExpira = formatarData(conta.expira);
+        const diasRestantes = calcularDias(conta.expira);
+        const status = diasRestantes > 0 ? '✅' : '❌';
         
-        text += `${status} <b>#${conta.id}</b> | ${conta.username}\n`;
-        text += `   Exp: ${expira} (${conta.dias_restantes} dias)\n`;
-        text += `   Con: ${conta.con_ativas}/${conta.max_con}\n\n`;
+        text += `${status} <b>ID #${conta.id}</b> | Exp: ${dataExpira} | ${diasRestantes} dias\n`;
         
         buttons.push([{
-            text: `📌 ID #${conta.id}`,
+            text: `📌 ID #${conta.id} (${diasRestantes}d)`,
             callback_data: `view_account|${conta.id}`
         }]);
     });
@@ -241,23 +319,30 @@ bot.onText(/\/ajuda/, (msg) => {
 1. Digite /servidores para ver lista de servidores
 2. Clique no servidor desejado
 3. Clique no ID da conta para ver detalhes completos
-4. Use "Próximo/Anterior" para paginar
+4. Use "Copiar Dados" para copiar todas as informações
+5. Use "Próximo/Anterior" para paginar
 
 <b>Dados exibidos:</b>
-🌐 HOST - Endereço do servidor
-👤 USER - Usuário da conta
-🔑 PASS - Senha da conta
-🔌 CON.ATIVAS - Conexões ativas
-👥 MAX.CON - Máximo de conexões
-⏱️ CRIADA - Data de criação
-📆 EXPIRA - Data de expiração
-⏰ DIAS - Dias restantes
-🔗 M3U - Link da lista
+🔸 <b>ID</b> - Número da conta
+🌐 <b>HOST</b> - Endereço do servidor
+👤 <b>USER</b> - Usuário da conta
+🔑 <b>PASS</b> - Senha da conta
+⏱️ <b>CRIADA</b> - Data de criação
+📆 <b>EXPIRA</b> - Data de expiração
+⏰ <b>DIAS RESTANTES</b> - Exato de dias
+🔌 <b>CON.ATIVAS</b> - Conexões ativas
+👥 <b>MAX.CON</b> - Máximo de conexões
+🔗 <b>M3U</b> - Link completo da lista
 
 <b>Comandos:</b>
 /start - Inicia o bot
 /servidores - Lista servidores
 /ajuda - Esta mensagem
+
+<b>Botões:</b>
+📋 Copiar Dados - Copia todas as informações
+◀️ Voltar - Volta para lista de contas
+🏠 Menu - Volta para menu de servidores
 
 Dúvidas? Entre em contato com o admin! 📞
     `.trim();
