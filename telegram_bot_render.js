@@ -95,7 +95,7 @@ async function importarArquivo(fileContent) {
 
 async function deletarServidor(host) {
     try {
-        const res = await axios.post(`${API_URL}?action=delete_server`, { host });
+        const res = await axios.post(`${API_URL}?action=delete_server_bot`, { host });
         return res.data;
     } catch (e) {
         return { ok: false, erro: e.message };
