@@ -1,23 +1,33 @@
 {
-  "name": "telegram-iptv-bot",
-  "version": "1.0.0",
-  "description": "Bot Telegram para gerenciar contas IPTV",
-  "main": "telegram_bot_render.js",
+  "name": "telegram-iptv-bot-improved",
+  "version": "2.0.0",
+  "description": "Bot Telegram avançado para gerenciar contas IPTV com cache, admin, e busca",
+  "main": "telegram_bot_improved.js",
   "scripts": {
-    "start": "node telegram_bot_render.js"
+    "start": "node telegram_bot_improved.js",
+    "dev": "node telegram_bot_improved.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
     "telegram",
     "bot",
-    "iptv"
+    "iptv",
+    "cache",
+    "admin"
   ],
   "author": "Seu Nome",
   "license": "MIT",
   "dependencies": {
-    "node-telegram-bot-api": "0.61.0",
-    "axios": "1.6.0"
+    "node-telegram-bot-api": "^0.64.0",
+    "axios": "^1.7.0",
+    "dotenv": "^16.3.1"
   },
+  "devDependencies": {},
   "engines": {
-    "node": "18.x"
+    "node": "18.x || 20.x"
+  },
+  "repository": {
+    "type": "git",
+    "url": "seu-repositorio-aqui"
   }
 }
