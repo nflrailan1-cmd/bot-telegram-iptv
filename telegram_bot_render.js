@@ -56,6 +56,7 @@ async function getServers() {
         const res = await axios.get(`${API_URL}?action=get_servers`);
         return res.data.servers || [];
     } catch (e) {
+        console.error('❌ Erro ao buscar servidores:', e.message);
         return [];
     }
 }
@@ -65,6 +66,7 @@ async function getAccounts(host, page = 1) {
         const res = await axios.get(`${API_URL}?action=get_accounts&host=${encodeURIComponent(host)}&page=${page}`);
         return res.data;
     } catch (e) {
+        console.error('❌ Erro ao buscar contas:', e.message);
         return null;
     }
 }
@@ -74,6 +76,7 @@ async function getAccountDetails(id) {
         const res = await axios.get(`${API_URL}?action=format_account&id=${id}`);
         return res.data;
     } catch (e) {
+        console.error('❌ Erro ao buscar detalhes da conta:', e.message);
         return null;
     }
 }
@@ -83,6 +86,7 @@ async function marcarEmUso(id) {
         const res = await axios.post(`${API_URL}?action=mark_in_use`, { id });
         return res.data;
     } catch (e) {
+        console.error('❌ Erro ao marcar em uso:', e.message);
         return null;
     }
 }
@@ -92,15 +96,17 @@ async function desmarcarEmUso(id) {
         const res = await axios.post(`${API_URL}?action=mark_not_in_use`, { id });
         return res.data;
     } catch (e) {
+        console.error('❌ Erro ao desmarcar em uso:', e.message);
         return null;
     }
 }
 
 async function deletarServidor(host) {
     try {
-        const res = await axios.post(`${API_URL}?action=delete_server_bot`, { host });
+        const res = await axios.post(`${API_URL}?action=delete_server`, { host });
         return res.data;
     } catch (e) {
+        console.error('❌ Erro ao deletar servidor:', e.message);
         return { ok: false, erro: e.message };
     }
 }
@@ -113,6 +119,7 @@ async function importarArquivo(fileContent) {
         );
         return res.data;
     } catch (e) {
+        console.error('❌ Erro ao importar arquivo:', e.message);
         return { ok: false, erro: e.message };
     }
 }
