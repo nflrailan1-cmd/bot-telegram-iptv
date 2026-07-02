@@ -17,7 +17,6 @@ console.log('🤖 Bot iniciado!');
 console.log('📡 API URL:', API_URL);
 
 const userStates = {};
-const deleteAttempts = {};
 
 function formatarData(data) {
     if (!data) return '-';
@@ -39,12 +38,9 @@ function calcularDias(dataExpira) {
 
 async function getServers() {
     try {
-        console.log('Buscando servidores...', `${API_URL}?action=get_servers`);
         const res = await axios.get(`${API_URL}?action=get_servers`);
-        console.log('Resposta da API:', res.data);
         return res.data.servers || [];
     } catch (e) {
-        console.error('❌ Erro ao buscar servidores:', e.message);
         return [];
     }
 }
@@ -97,17 +93,6 @@ async function importarArquivo(fileContent) {
     }
 }
 
-async function deletarServidor(host) {
-    try {
-        const res = await axios.post(`${API_URL}?action=delete_server_bot`, { host });
-        return res.data;
-    } catch (e) {
-        return { ok: false, erro: e.message };
-    }
-}
-
-const SENHA_DELETE = process.env.SENHA_DELETE || '1234';
-
 bot.onText(/\/start/, async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id;
@@ -157,10 +142,7 @@ async function showServers(chatId) {
     
     servers.forEach(s => {
         text += `${s.host} (${s.count})\n`;
-        buttons.push([
-            { text: s.host, callback_data: `select_server|${s.host}|1` },
-            { text: '🗑️', callback_data: `confirm_delete|${s.host}` }
-        ]);
+        buttons.push([{ text: s.host, callback_data: `select_server|${s.host}|1` }]);
     });
     
     bot.sendMessage(chatId, text, { parse_mode: 'HTML', reply_markup: { inline_keyboard: buttons } });
@@ -232,23 +214,9 @@ bot.on('callback_query', async (query) => {
     } else if (data.startsWith('page|')) {
         const [, host, page] = data.split('|');
         await showAccounts(chatId, host, parseInt(page));
-    } else if (data.startsWith('confirm_delete|')) {
-        const host = data.split('|')[1];
-        userStates[chatId] = { action: 'awaiting_delete_password', host };
-        bot.sendMessage(chatId, `🔐 <b>CONFIRMAR DELETE</b>\n\n${host}\n\nDigite a senha para deletar este servidor:`, {
-            parse_mode: 'HTML'
-        });
-    } else if (data.startsWith('delete_server|')) {
-        const host = data.split('|')[1];
-        const resultado = await deletarServidor(host);
-        
-        if (resultado.ok) {
-            bot.sendMessage(chatId, `✅ <b>SERVIDOR DELETADO!</b>\n\n${host}`, { parse_mode: 'HTML' });
-            await showServers(chatId);
-        } else {
-            bot.sendMessage(chatId, `❌ Erro: ${resultado.erro}`);
-        }
     }
+    
+    bot.answerCallbackQuery(query.id);
 });
 
 async function showAccounts(chatId, host, page = 1) {
@@ -279,29 +247,6 @@ async function showAccounts(chatId, host, page = 1) {
     
     bot.sendMessage(chatId, text, { parse_mode: 'HTML', reply_markup: { inline_keyboard: buttons } });
 }
-
-bot.on('message', async (msg) => {
-    const chatId = msg.chat.id;
-    const text = msg.text;
-    
-    if (userStates[chatId]?.action === 'awaiting_delete_password') {
-        if (text === SENHA_DELETE) {
-            const host = userStates[chatId].host;
-            const resultado = await deletarServidor(host);
-            
-            if (resultado.ok) {
-                bot.sendMessage(chatId, `✅ <b>SERVIDOR DELETADO!</b>\n\n${host}`, { parse_mode: 'HTML' });
-                await showServers(chatId);
-            } else {
-                bot.sendMessage(chatId, `❌ Erro: ${resultado.erro}`);
-            }
-            
-            delete userStates[chatId];
-        } else {
-            bot.sendMessage(chatId, '❌ Senha incorreta! Tente novamente.');
-        }
-    }
-});
 
 bot.on('document', async (msg) => {
     const chatId = msg.chat.id;
