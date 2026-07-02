@@ -4,7 +4,7 @@
   "description": "Bot Telegram IPTV",
   "main": "telegram_bot.js",
   "scripts": {
-    "start": "node telegram_bot.js & node keepalive.js",
+    "start": "node telegram_bot_render.js & node keepalive.js",
     "bot": "node telegram_bot.js",
     "keepalive": "node keepalive.js"
   },
