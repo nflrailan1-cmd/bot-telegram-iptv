@@ -2,7 +2,7 @@
   "name": "telegram-iptv-bot-improved",
   "version": "2.0.0",
   "description": "Bot Telegram avançado para gerenciar contas IPTV com cache, admin, e busca",
-  "main": "telegram_bot_improved.js",
+  "main": "telegram_bot_render.js",
   "scripts": {
     "start": "node telegram_bot_render.js",
     "dev": "node telegram_bot_improved.js",
