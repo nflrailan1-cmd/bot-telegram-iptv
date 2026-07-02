@@ -1,23 +1,14 @@
 {
-  "name": "telegram-iptv-bot",
+  "name": "bot-telegram-iptv",
   "version": "1.0.0",
-  "description": "Bot Telegram para gerenciar contas IPTV",
-  "main": "telegram_bot_render.js",
+  "description": "Bot Telegram IPTV",
+  "main": "telegram_bot_render_webhook.js",
   "scripts": {
-    "start": "node telegram_bot_render.js"
+    "start": "node telegram_bot_render_webhook.js"
   },
-  "keywords": [
-    "telegram",
-    "bot",
-    "iptv"
-  ],
-  "author": "Seu Nome",
-  "license": "MIT",
   "dependencies": {
-    "node-telegram-bot-api": "0.61.0",
-    "axios": "1.6.0"
-  },
-  "engines": {
-    "node": "18.x"
+    "node-telegram-bot-api": "^0.64.0",
+    "axios": "^1.6.0",
+    "express": "^4.18.0"
   }
 }
