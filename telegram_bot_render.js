@@ -39,9 +39,12 @@ function calcularDias(dataExpira) {
 
 async function getServers() {
     try {
+        console.log('Buscando servidores...', `${API_URL}?action=get_servers`);
         const res = await axios.get(`${API_URL}?action=get_servers`);
+        console.log('Resposta da API:', res.data);
         return res.data.servers || [];
     } catch (e) {
+        console.error('❌ Erro ao buscar servidores:', e.message);
         return [];
     }
 }
