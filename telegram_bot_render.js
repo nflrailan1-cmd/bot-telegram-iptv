@@ -152,8 +152,8 @@ async function showServers(chatId) {
     servers.forEach(s => {
         text += `${s.host} (${s.count})\n`;
         buttons.push([
-            { text: s.host, callback_data: `select_server|${s.host}|1` },
-            { text: '🗑️', callback_data: `confirm_delete|${s.host}` }
+            { text: `${s.host} 🗑️`, callback_data: `select_server|${s.host}|1` },
+            { text: 'X', callback_data: `confirm_delete|${s.host}` }
         ]);
     });
     
