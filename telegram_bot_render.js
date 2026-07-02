@@ -9,12 +9,13 @@ if (!TOKEN || !API_URL) {
     process.exit(1);
 }
 
-const bot = new TelegramBot(TOKEN, { polling: true });
+const bot = new TelegramBot(TOKEN, { 
+    polling: true
+});
 
 console.log('🤖 Bot iniciado!');
 console.log('📡 API URL:', API_URL);
 
-// Armazenar estado de upload
 const userStates = {};
 
 function formatarData(data) {
@@ -80,7 +81,6 @@ async function desmarcarEmUso(id) {
     }
 }
 
-// Importar arquivo TXT
 async function importarArquivo(fileContent) {
     try {
         const res = await axios.post(`${API_URL}?action=import_file`, 
@@ -89,7 +89,6 @@ async function importarArquivo(fileContent) {
         );
         return res.data;
     } catch (e) {
-        console.error('Erro ao importar:', e.message);
         return { ok: false, erro: e.message };
     }
 }
@@ -124,37 +123,11 @@ bot.onText(/\/servidores/, async (msg) => {
 bot.onText(/\/importar/, async (msg) => {
     const chatId = msg.chat.id;
     userStates[chatId] = 'awaiting_file';
-    
-    bot.sendMessage(chatId, '📤 <b>IMPORTAR ARQUIVO</b>\n\nEnvie um arquivo .TXT com as contas:\n\n<code>NΔTΔN\n├🔸🌐 𝐇𝐎𝐒𝐓 = http://host:80\n├♦️👤 𝐔𝐒𝐄𝐑 = usuario\n├🔸🔑 𝐏𝐀𝐒𝐒 = senha\n...</code>', {
-        parse_mode: 'HTML'
-    });
+    bot.sendMessage(chatId, '📤 Envie um arquivo .TXT com as contas', { reply_markup: { remove_keyboard: true } });
 });
 
 bot.onText(/\/ajuda/, (msg) => {
-    bot.sendMessage(msg.chat.id, 
-`📚 <b>AJUDA</b>
-
-<b>Comandos:</b>
-/start - Menu inicial
-/servidores - Ver servidores
-/importar - Importar arquivo TXT
-/ajuda - Esta mensagem
-
-<b>Importar TXT:</b>
-1. /importar
-2. Envie um arquivo .TXT
-3. Bot processa e carrega no servidor
-
-<b>Marcar em Uso:</b>
-- Clique em "Marcar como USADO" para indicar que está usando a conta
-- Aparecerá no painel com status "Em uso"
-
-<b>Formatos:</b>
-✅ Formato UPA.txt com texto negrito
-✅ Formato emoji tradicional
-✅ Qualquer formato com HOST, USER, PASS`, 
-        { parse_mode: 'HTML' }
-    );
+    bot.sendMessage(msg.chat.id, '📚 <b>AJUDA</b>\n\n/start - Menu\n/servidores - Ver servidores\n/importar - Importar TXT\n/ajuda - Esta mensagem', { parse_mode: 'HTML' });
 });
 
 async function showServers(chatId) {
@@ -183,7 +156,7 @@ bot.on('callback_query', async (query) => {
         await showServers(chatId);
     } else if (data === 'import_menu') {
         userStates[chatId] = 'awaiting_file';
-        bot.sendMessage(chatId, '📤 Envie um arquivo .TXT para importar:', { reply_markup: { remove_keyboard: true } });
+        bot.sendMessage(chatId, '📤 Envie um arquivo .TXT para importar:');
     } else if (data.startsWith('select_server|')) {
         const [, host, page] = data.split('|');
         await showAccounts(chatId, host, parseInt(page));
@@ -198,31 +171,9 @@ bot.on('callback_query', async (query) => {
             const dias = calcularDias(c.expira);
             const emUso = c.in_use ? '✅ SIM' : '❌ NÃO';
             
-            const msg = `
-<b>📌 ID:</b> <code>${c.id}</code>
-
-<b>🌐 HOST:</b> <code>${c.host}</code>
-<b>👤 USER:</b> <code>${c.username}</code>
-<b>🔑 PASS:</b> <code>${c.password}</code>
-
-<b>⏱️ CRIADA:</b> ${dataCria}
-<b>📆 EXPIRA:</b> ${dataExp}
-<b>⏰ DIAS:</b> <b>${dias}</b>
-
-<b>🔌 ATIVAS:</b> ${c.con_ativas}/${c.max_con}
-
-<b>📱 EM USO:</b> ${emUso}
-
-<b>🔗 M3U:</b>
-<code>${c.m3u_url}</code>
-            `.trim();
+            const msg = `<b>📌 ID:</b> <code>${c.id}</code>\n\n<b>🌐 HOST:</b> <code>${c.host}</code>\n<b>👤 USER:</b> <code>${c.username}</code>\n<b>🔑 PASS:</b> <code>${c.password}</code>\n\n<b>⏱️ CRIADA:</b> ${dataCria}\n<b>📆 EXPIRA:</b> ${dataExp}\n<b>⏰ DIAS:</b> <b>${dias}</b>\n\n<b>🔌 ATIVAS:</b> ${c.con_ativas}/${c.max_con}\n\n<b>📱 EM USO:</b> ${emUso}\n\n<b>🔗 M3U:</b>\n<code>${c.m3u_url}</code>`;
             
-            const botoes = [
-                [
-                    { text: '📋 Copiar', callback_data: `copy|${c.id}` },
-                    { text: '◀️ Voltar', callback_data: `select_server|${c.host}|1` }
-                ]
-            ];
+            const botoes = [[{ text: '📋 Copiar', callback_data: `copy|${c.id}` }, { text: '◀️ Voltar', callback_data: `select_server|${c.host}|1` }]];
             
             if (c.in_use) {
                 botoes.push([{ text: '🔴 Marcar como NÃO Usado', callback_data: `toggle_in_use|${c.id}|${c.host}` }]);
@@ -230,10 +181,7 @@ bot.on('callback_query', async (query) => {
                 botoes.push([{ text: '🟢 Marcar como USADO', callback_data: `toggle_in_use|${c.id}|${c.host}` }]);
             }
             
-            bot.sendMessage(chatId, msg, {
-                parse_mode: 'HTML',
-                reply_markup: { inline_keyboard: botoes }
-            });
+            bot.sendMessage(chatId, msg, { parse_mode: 'HTML', reply_markup: { inline_keyboard: botoes } });
         }
     } else if (data.startsWith('copy|')) {
         const id = data.split('|')[1];
@@ -246,16 +194,7 @@ bot.on('callback_query', async (query) => {
             const dias = calcularDias(c.expira);
             const emUso = c.in_use ? 'SIM' : 'NÃO';
             
-            const txt = `ID: ${c.id}
-HOST: ${c.host}
-USER: ${c.username}
-PASS: ${c.password}
-CRIADA: ${dataCria}
-EXPIRA: ${dataExp}
-DIAS: ${dias}
-ATIVAS: ${c.con_ativas}/${c.max_con}
-EM USO: ${emUso}
-M3U: ${c.m3u_url}`;
+            const txt = `ID: ${c.id}\nHOST: ${c.host}\nUSER: ${c.username}\nPASS: ${c.password}\nCRIADA: ${dataCria}\nEXPIRA: ${dataExp}\nDIAS: ${dias}\nATIVAS: ${c.con_ativas}/${c.max_con}\nEM USO: ${emUso}\nM3U: ${c.m3u_url}`;
             
             bot.sendMessage(chatId, `<pre>${txt}</pre>`, { parse_mode: 'HTML' });
         }
@@ -265,15 +204,12 @@ M3U: ${c.m3u_url}`;
         
         if (result && result.ok) {
             const c = result.conta;
-            
             if (c.in_use) {
                 await desmarcarEmUso(id);
             } else {
                 await marcarEmUso(id);
             }
-            
-            const novoStatus = c.in_use ? 'NÃO Usado' : 'USADO';
-            bot.answerCallbackQuery(query.id, `✅ Marcado como ${novoStatus}!`, true);
+            bot.answerCallbackQuery(query.id, '✅ Status atualizado!', true);
         }
     } else if (data.startsWith('page|')) {
         const [, host, page] = data.split('|');
@@ -312,27 +248,24 @@ async function showAccounts(chatId, host, page = 1) {
     bot.sendMessage(chatId, text, { parse_mode: 'HTML', reply_markup: { inline_keyboard: buttons } });
 }
 
-// Receber arquivo
 bot.on('document', async (msg) => {
     const chatId = msg.chat.id;
     const fileId = msg.document.file_id;
     const fileName = msg.document.file_name || 'arquivo';
     
     if (userStates[chatId] !== 'awaiting_file') {
-        bot.sendMessage(chatId, '❌ Use /importar para fazer upload de arquivo');
+        bot.sendMessage(chatId, '❌ Use /importar para fazer upload');
         return;
     }
     
-    // Verificar se é arquivo TXT
     if (!fileName.toLowerCase().endsWith('.txt')) {
         bot.sendMessage(chatId, '❌ Envie apenas arquivo .TXT');
         return;
     }
     
     try {
-        bot.sendMessage(chatId, '⏳ Processando arquivo...');
+        bot.sendMessage(chatId, '⏳ Processando...');
         
-        // Baixar arquivo
         const fileStream = await bot.getFileStream(fileId);
         let fileContent = '';
         
@@ -341,35 +274,22 @@ bot.on('document', async (msg) => {
         });
         
         fileStream.on('end', async () => {
-            // Importar arquivo
             const resultado = await importarArquivo(fileContent);
             
             if (resultado.ok) {
-                bot.sendMessage(chatId, `
-✅ <b>ARQUIVO IMPORTADO COM SUCESSO!</b>
-
-📊 <b>Resumo:</b>
-• Contas adicionadas: ${resultado.adicionadas || 0}
-• Contas atualizadas: ${resultado.atualizadas || 0}
-• Erros: ${resultado.erros || 0}
-
-🎯 As contas já estão disponíveis no servidor!`, {
+                bot.sendMessage(chatId, `✅ <b>ARQUIVO IMPORTADO!</b>\n\n📊 Adicionadas: ${resultado.adicionadas}\n📊 Atualizadas: ${resultado.atualizadas}\n❌ Erros: ${resultado.erros}`, {
                     parse_mode: 'HTML',
-                    reply_markup: {
-                        inline_keyboard: [[{ text: '📋 Ver Servidores', callback_data: 'show_servers' }]]
-                    }
+                    reply_markup: { inline_keyboard: [[{ text: '📋 Ver Servidores', callback_data: 'show_servers' }]] }
                 });
             } else {
-                bot.sendMessage(chatId, `❌ <b>Erro ao importar:</b>\n${resultado.erro || 'Erro desconhecido'}`, {
-                    parse_mode: 'HTML'
-                });
+                bot.sendMessage(chatId, `❌ Erro: ${resultado.erro}`);
             }
             
             delete userStates[chatId];
         });
         
         fileStream.on('error', (err) => {
-            bot.sendMessage(chatId, `❌ Erro ao baixar arquivo: ${err.message}`);
+            bot.sendMessage(chatId, `❌ Erro: ${err.message}`);
             delete userStates[chatId];
         });
         
