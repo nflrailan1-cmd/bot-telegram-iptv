@@ -81,6 +81,15 @@ async function desmarcarEmUso(id) {
     }
 }
 
+async function deletarServidor(host) {
+    try {
+        const res = await axios.post(`${API_URL}?action=delete_server_bot`, { host });
+        return res.data;
+    } catch (e) {
+        return { ok: false, erro: e.message };
+    }
+}
+
 async function importarArquivo(fileContent) {
     try {
         const res = await axios.post(`${API_URL}?action=import_file`, 
@@ -142,7 +151,10 @@ async function showServers(chatId) {
     
     servers.forEach(s => {
         text += `${s.host} (${s.count})\n`;
-        buttons.push([{ text: s.host, callback_data: `select_server|${s.host}|1` }]);
+        buttons.push([
+            { text: s.host, callback_data: `select_server|${s.host}|1` },
+            { text: '🗑️', callback_data: `confirm_delete|${s.host}` }
+        ]);
     });
     
     bot.sendMessage(chatId, text, { parse_mode: 'HTML', reply_markup: { inline_keyboard: buttons } });
@@ -160,6 +172,31 @@ bot.on('callback_query', async (query) => {
     } else if (data.startsWith('select_server|')) {
         const [, host, page] = data.split('|');
         await showAccounts(chatId, host, parseInt(page));
+    } else if (data.startsWith('confirm_delete|')) {
+        const host = data.split('|')[1];
+        bot.sendMessage(chatId, `⚠️ <b>DELETAR ${host}?</b>\n\nTodas as contas deste servidor serão deletadas!`, {
+            parse_mode: 'HTML',
+            reply_markup: {
+                inline_keyboard: [
+                    [
+                        { text: '🔴 DELETAR', callback_data: `delete_server|${host}` },
+                        { text: '❌ Cancelar', callback_data: 'show_servers' }
+                    ]
+                ]
+            }
+        });
+    } else if (data.startsWith('delete_server|')) {
+        const host = data.split('|')[1];
+        const resultado = await deletarServidor(host);
+        
+        if (resultado.ok) {
+            bot.sendMessage(chatId, `✅ <b>SERVIDOR DELETADO!</b>\n\n🗑️ ${resultado.deletadas} contas removidas`, {
+                parse_mode: 'HTML',
+                reply_markup: { inline_keyboard: [[{ text: '📋 Ver Servidores', callback_data: 'show_servers' }]] }
+            });
+        } else {
+            bot.sendMessage(chatId, `❌ Erro: ${resultado.erro}`);
+        }
     } else if (data.startsWith('view_account|')) {
         const id = data.split('|')[1];
         const result = await getAccountDetails(id);
