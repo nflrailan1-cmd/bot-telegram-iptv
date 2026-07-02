@@ -1,22 +1,35 @@
-const http = require('http');
+const https = require('https');
 
-// URL do seu bot no Render (substitua pela sua URL real)
-const BOT_URL = process.env.BOT_URL || 'https://seu-bot.onrender.com';
-
-// Faz requisição a cada 14 minutos (para não hibernar)
-const INTERVAL = 14 * 60 * 1000; // 14 minutos
+const BOT_URL = process.env.BOT_URL || 'https://bot-telegram-iptv.onrender.com';
 
 function keepAlive() {
-    http.get(BOT_URL, (res) => {
-        console.log(`[${new Date().toLocaleString()}] Keepalive - Status: ${res.statusCode}`);
-    }).on('error', (err) => {
-        console.error(`[${new Date().toLocaleString()}] Keepalive Error: ${err.message}`);
+    const url = new URL(BOT_URL);
+    
+    const options = {
+        hostname: url.hostname,
+        port: 443,
+        path: '/',
+        method: 'GET',
+        timeout: 5000
+    };
+    
+    const req = https.request(options, (res) => {
+        console.log(`✅ Keepalive ping: ${res.statusCode}`);
     });
+    
+    req.on('error', (e) => {
+        console.error(`❌ Keepalive erro: ${e.message}`);
+    });
+    
+    req.setTimeout(5000, () => {
+        req.destroy();
+    });
+    
+    req.end();
 }
 
-// Executa imediatamente e depois a cada intervalo
+// Executar a cada 14 minutos
+setInterval(keepAlive, 14 * 60 * 1000);
 keepAlive();
-setInterval(keepAlive, INTERVAL);
 
-console.log(`✓ Keepalive iniciado. Requisições a cada ${INTERVAL / 60000} minutos`);
-console.log(`  URL: ${BOT_URL}`);
+console.log('⏰ Keepalive iniciado (a cada 14 minutos)');
