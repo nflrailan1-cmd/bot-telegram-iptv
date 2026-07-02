@@ -98,10 +98,16 @@ async function showServers(chatId) {
     
     servers.forEach((server, index) => {
         text += `${index + 1}. ${server.host} (${server.count} contas)\n`;
-        buttons.push([{
-            text: `${server.host}`,
-            callback_data: `select_server|${server.host}|1`
-        }]);
+        buttons.push([
+            {
+                text: `📂 ${server.host}`,
+                callback_data: `select_server|${server.host}|1`
+            },
+            {
+                text: '🗑️ Deletar',
+                callback_data: `delete_server|${server.host}`
+            }
+        ]);
     });
     
     bot.sendMessage(chatId, text, {
@@ -121,6 +127,43 @@ bot.on('callback_query', async (query) => {
     bot.sendChatAction(chatId, 'typing');
     
     if (data === 'show_servers') {
+        await showServers(chatId);
+        bot.answerCallbackQuery(query.id);
+        return;
+    }
+    
+    // Delete server | host
+    if (data.startsWith('delete_server|')) {
+        const host = data.split('|')[1];
+        userStates[chatId] = { action: 'confirm_delete_server', host: host };
+        
+        bot.sendMessage(chatId, `⚠️ <b>CUIDADO!</b>\n\nVocê tem certeza que deseja <b>DELETAR TODAS</b> as contas do servidor:\n\n🌐 <code>${host}</code>\n\nEsta ação <b>NÃO pode ser desfeita!</b>`, {
+            parse_mode: 'HTML',
+            reply_markup: {
+                inline_keyboard: [[
+                    { text: '✅ Sim, deletar', callback_data: `confirm_delete|${host}` },
+                    { text: '❌ Cancelar', callback_data: 'show_servers' }
+                ]]
+            }
+        });
+        bot.answerCallbackQuery(query.id);
+        return;
+    }
+    
+    // Confirm delete server
+    if (data.startsWith('confirm_delete|')) {
+        const host = data.split('|')[1];
+        try {
+            await axios.post(`${API_URL}?action=delete_server`, { host: host });
+            bot.sendMessage(chatId, `✅ <b>Servidor deletado com sucesso!</b>\n\n🌐 ${host}\n\nTodas as ${userStates[chatId]?.count || '?'} contas foram removidas.`, {
+                parse_mode: 'HTML'
+            });
+        } catch (error) {
+            bot.sendMessage(chatId, `❌ Erro ao deletar servidor: ${error.message}`, {
+                parse_mode: 'HTML'
+            });
+        }
+        delete userStates[chatId];
         await showServers(chatId);
         bot.answerCallbackQuery(query.id);
         return;
