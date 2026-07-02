@@ -1,20 +1,32 @@
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
+const express = require('express');
 
-const TOKEN = process.env.TELEGRAM_TOKEN;
+const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const API_URL = process.env.API_URL;
+const BOT_URL = process.env.BOT_URL;
+const PORT = process.env.PORT || 3000;
 
-if (!TOKEN || !API_URL) {
-    console.error('❌ TOKEN ou API_URL não configurados!');
+if (!TOKEN || !API_URL || !BOT_URL) {
+    console.error('❌ TOKEN, API_URL ou BOT_URL não configurados!');
     process.exit(1);
 }
 
 const bot = new TelegramBot(TOKEN, { 
-    polling: true
+    webHook: {
+        port: PORT,
+        host: '0.0.0.0'
+    }
 });
 
-console.log('🤖 Bot iniciado!');
+const app = express();
+app.use(express.json());
+
+bot.setWebHook(`${BOT_URL}/bot${TOKEN}`);
+
+console.log('🤖 Bot iniciado com webhook!');
 console.log('📡 API URL:', API_URL);
+console.log('🔗 Webhook:', `${BOT_URL}/bot${TOKEN}`);
 
 const userStates = {};
 
@@ -299,4 +311,17 @@ bot.on('document', async (msg) => {
     }
 });
 
-console.log('✅ Bot aguardando mensagens...');
+// Webhook route
+app.post(`/bot${TOKEN}`, (req, res) => {
+    bot.processUpdate(req.body);
+    res.sendStatus(200);
+});
+
+// Health check
+app.get('/', (req, res) => {
+    res.send('🤖 Bot ativo!');
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`✅ Servidor escutando na porta ${PORT}`);
+});
