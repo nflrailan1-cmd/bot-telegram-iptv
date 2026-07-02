@@ -3,7 +3,7 @@ const axios = require('axios');
 
 // ===================== CONFIGURAÇÃO ======================
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN || 'SEU_TOKEN_AQUI';
-const API_URL = 'https://seu-painel.com/telegram_api.php'; // Altere para sua URL
+const API_URL = 'https://mundofiaspo.com/gestor/telegram_api.php';
 const bot = new TelegramBot(TOKEN, { polling: true });
 
 // Armazenar estado dos usuários
