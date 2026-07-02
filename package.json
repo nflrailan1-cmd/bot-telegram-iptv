@@ -2,14 +2,14 @@
   "name": "telegram-bot-iptv",
   "version": "1.0.0",
   "description": "Bot Telegram IPTV",
-  "main": "telegram_bot_render.js",
+  "main": "telegram_bot_render_v2.js",
   "scripts": {
-    "start": "node telegram_bot_render.js & node keepalive.js",
-    "bot": "node telegram_bot_render.js",
+    "start": "node telegram_bot_render_v2.js & node keepalive.js",
+    "bot": "node telegram_bot_render_v2.js",
     "keepalive": "node keepalive.js"
   },
   "dependencies": {
-    "node-telegram-bot-api": "^0.63.0",
+    "telegraf": "^4.14.0",
     "axios": "^1.6.0"
   }
 }
