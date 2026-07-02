@@ -25,6 +25,12 @@ const dbConfig = {
 
 const pool = mysql.createPool(dbConfig);
 
+console.log('🔧 Configurações:');
+console.log('  TELEGRAM_TOKEN:', TELEGRAM_TOKEN ? '✓' : '✗');
+console.log('  WEBHOOK_URL:', WEBHOOK_URL);
+console.log('  API_URL:', API_URL);
+console.log('  DB_HOST:', process.env.DB_HOST);
+
 // ==================== FUNÇÕES AUXILIARES ====================
 async function sendMessage(chatId, text, keyboard = null, parseMode = 'HTML') {
     try {
@@ -38,9 +44,11 @@ async function sendMessage(chatId, text, keyboard = null, parseMode = 'HTML') {
             payload.reply_markup = keyboard;
         }
         
+        console.log('📤 Enviando mensagem para', chatId);
         await axios.post(`${TELEGRAM_API}/sendMessage`, payload);
+        console.log('✅ Mensagem enviada');
     } catch (error) {
-        console.error('Erro ao enviar mensagem:', error.message);
+        console.error('❌ Erro ao enviar mensagem:', error.message);
     }
 }
 
@@ -89,30 +97,36 @@ async function sendChatAction(chatId, action = 'typing') {
 // ==================== API CALLS ====================
 async function getServers() {
     try {
+        console.log('🔍 Obtendo servidores...');
         const res = await axios.get(`${API_URL}?action=get_servers`, { timeout: 5000 });
+        console.log('✅ Servidores obtidos:', res.data.servers?.length || 0);
         return res.data.servers || [];
     } catch (error) {
-        console.error('Erro ao obter servidores:', error.message);
+        console.error('❌ Erro ao obter servidores:', error.message);
         return [];
     }
 }
 
 async function getAccounts(host, page = 1) {
     try {
+        console.log('🔍 Obtendo contas para', host, 'página', page);
         const res = await axios.get(`${API_URL}?action=get_accounts&host=${encodeURIComponent(host)}&page=${page}`, { timeout: 5000 });
+        console.log('✅ Contas obtidas:', res.data.contas?.length || 0);
         return res.data;
     } catch (error) {
-        console.error('Erro ao obter contas:', error.message);
+        console.error('❌ Erro ao obter contas:', error.message);
         return null;
     }
 }
 
 async function getAccountDetails(id) {
     try {
+        console.log('🔍 Obtendo detalhes da conta', id);
         const res = await axios.get(`${API_URL}?action=format_account&id=${id}`, { timeout: 5000 });
+        console.log('✅ Detalhes obtidos');
         return res.data;
     } catch (error) {
-        console.error('Erro ao obter detalhes:', error.message);
+        console.error('❌ Erro ao obter detalhes:', error.message);
         return null;
     }
 }
@@ -130,25 +144,15 @@ async function markInUse(id, inUse) {
     }
 }
 
-async function deleteServer(host) {
-    try {
-        const res = await axios.post(`${API_URL}?action=delete_server`, {
-            host: host
-        }, { timeout: 5000 });
-        return res.data;
-    } catch (error) {
-        console.error('Erro ao deletar servidor:', error.message);
-        return { ok: false };
-    }
-}
-
 async function registerUser(userId, username, firstName) {
     try {
+        console.log('📝 Registrando usuário', userId);
         await axios.post(`${API_URL}?action=register_user`, {
             user_id: userId,
             username: username || 'N/A',
             first_name: firstName || 'N/A'
         }, { timeout: 5000 });
+        console.log('✅ Usuário registrado');
     } catch (error) {
         console.error('Erro ao registrar usuário:', error.message);
     }
@@ -156,6 +160,7 @@ async function registerUser(userId, username, firstName) {
 
 // ==================== HANDLERS ====================
 async function handleStart(chatId, userId, username, firstName) {
+    console.log('🎯 /start - usuário', userId);
     await registerUser(userId, username, firstName);
     
     const text = `🎯 <b>BEM-VINDO AO BOT DE CONTAS IPTV</b>
@@ -178,6 +183,7 @@ Clique em Ver Servidores para começar! 👇`;
 }
 
 async function handleServidores(chatId) {
+    console.log('📡 /servidores');
     await sendChatAction(chatId);
     const servers = await getServers();
     
@@ -345,6 +351,9 @@ async function showAccountDetails(chatId, messageId, id, host, page) {
 // ==================== WEBHOOK ====================
 app.post('/webhook', async (req, res) => {
     try {
+        console.log('\n📨 Webhook recebido:');
+        console.log(JSON.stringify(req.body, null, 2));
+        
         const message = req.body.message;
         const query = req.body.callback_query;
         
@@ -355,6 +364,8 @@ app.post('/webhook', async (req, res) => {
             const userId = message.from.id;
             const username = message.from.username || '';
             const firstName = message.from.first_name || '';
+            
+            console.log(`📝 Mensagem: "${text}" de ${userId}`);
             
             if (text === '/start') {
                 await handleStart(chatId, userId, username, firstName);
@@ -373,6 +384,8 @@ app.post('/webhook', async (req, res) => {
             const messageId = query.message.message_id;
             const data = query.data;
             const callbackId = query.id;
+            
+            console.log(`🔘 Callback: ${data}`);
             
             await answerCallback(callbackId);
             
@@ -418,7 +431,7 @@ app.post('/webhook', async (req, res) => {
         
         res.status(200).json({ ok: true });
     } catch (error) {
-        console.error('Erro no webhook:', error);
+        console.error('❌ Erro no webhook:', error);
         res.status(200).json({ ok: true });
     }
 });
@@ -426,13 +439,16 @@ app.post('/webhook', async (req, res) => {
 // ==================== SETUP WEBHOOK ====================
 app.get('/setup-webhook', async (req, res) => {
     try {
+        console.log('⚙️ Configurando webhook...');
         await axios.post(`${TELEGRAM_API}/setWebhook`, {
             url: WEBHOOK_URL,
             max_connections: 40,
             allowed_updates: ['message', 'callback_query']
         });
+        console.log('✅ Webhook configurado');
         res.json({ ok: true, message: 'Webhook configurado com sucesso' });
     } catch (error) {
+        console.error('❌ Erro ao configurar webhook:', error.message);
         res.json({ ok: false, error: error.message });
     }
 });
@@ -444,7 +460,8 @@ app.get('/health', (req, res) => {
 
 // ==================== START SERVER ====================
 app.listen(PORT, () => {
-    console.log(`🤖 Bot Telegram iniciado na porta ${PORT}`);
+    console.log(`\n🤖 Bot Telegram iniciado na porta ${PORT}`);
     console.log(`📡 Webhook URL: ${WEBHOOK_URL}`);
     console.log(`🔗 API URL: ${API_URL}`);
+    console.log('\n✅ Servidor pronto para receber mensagens\n');
 });
