@@ -532,15 +532,15 @@ async function showServersCallback(chatId) {
     let text = `📡 <b>SERVIDORES DISPONÍVEIS:</b>\n\n`;
     const buttons = [];
     
-    servers.forEach((server, index) => {
-        text += `${index + 1}. ${server.host} (${server.count} contas)\n`;
+    servers.forEach((server) => {
+        text += `🔗 ${server.host}\n`;
         buttons.push([{
-            text: `${server.host} (${server.count})`,
+            text: `📋 Ver Contas - ${server.host}`,
             callback_data: `select_server|${server.host}|1`
         }]);
     });
     
-    buttons.push([[{ text: '🏠 Menu', callback_data: 'back_to_main' }]]);
+    buttons.push([{ text: '🏠 Menu', callback_data: 'back_to_main' }]);
     
     bot.sendMessage(chatId, text, {
         parse_mode: 'HTML',
