@@ -1,0 +1,31 @@
+{
+  "name": "bot-telegram-iptv",
+  "version": "2.0.0",
+  "description": "Bot Telegram para gerenciamento completo de servidor IPTV com menu operacional",
+  "main": "bot_telegram_v2.js",
+  "scripts": {
+    "start": "node bot_telegram_v2.js",
+    "dev": "nodemon bot_telegram_v2.js"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "iptv",
+    "gerenciamento",
+    "servidor",
+    "contas"
+  ],
+  "author": "Seu Nome",
+  "license": "MIT",
+  "dependencies": {
+    "node-telegram-bot-api": "^0.61.0",
+    "axios": "^1.6.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": "18.x"
+  }
+}
