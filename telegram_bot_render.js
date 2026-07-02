@@ -1,10 +1,20 @@
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
+const express = require('express');
 
 // ===================== CONFIGURAÇÃO ======================
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN || 'SEU_TOKEN_AQUI';
-const API_URL = 'https://seu-painel.com/telegram_api.php'; // Altere para sua URL
-const bot = new TelegramBot(TOKEN, { polling: true });
+const API_URL = process.env.PANEL_URL || 'https://mundofiaspo.com/gestor/telegram_api.php';
+const RENDER_URL = process.env.RENDER_EXTERNAL_URL || 'https://seu-app.onrender.com';
+const PORT = process.env.PORT || 3000;
+
+// ✅ Usar webhook para Render (mais eficiente que polling)
+const bot = new TelegramBot(TOKEN, { webHook: { port: PORT } });
+bot.setWebHook(`${RENDER_URL}/bot${TOKEN}`);
+
+// Express para receber webhooks
+const app = express();
+app.use(express.json());
 
 // Armazenar estado dos usuários
 const userStates = {};
@@ -15,7 +25,7 @@ async function getServers() {
         const res = await axios.get(`${API_URL}?action=get_servers`);
         return res.data.servers || [];
     } catch (error) {
-        console.error('Erro ao obter servidores:', error.message);
+        console.error('❌ Erro ao obter servidores:', error.message);
         return [];
     }
 }
@@ -25,7 +35,7 @@ async function getAccounts(host, page = 1) {
         const res = await axios.get(`${API_URL}?action=get_accounts&host=${encodeURIComponent(host)}&page=${page}`);
         return res.data;
     } catch (error) {
-        console.error('Erro ao obter contas:', error.message);
+        console.error('❌ Erro ao obter contas:', error.message);
         return null;
     }
 }
@@ -35,7 +45,7 @@ async function getAccountDetails(id) {
         const res = await axios.get(`${API_URL}?action=format_account&id=${id}`);
         return res.data;
     } catch (error) {
-        console.error('Erro ao obter detalhes:', error.message);
+        console.error('❌ Erro ao obter detalhes:', error.message);
         return null;
     }
 }
@@ -45,7 +55,6 @@ bot.onText(/\/start/, async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id;
     
-    // Registrar usuário
     try {
         await axios.post(`${API_URL}?action=register_user`, {
             user_id: userId,
@@ -53,7 +62,7 @@ bot.onText(/\/start/, async (msg) => {
             first_name: msg.from.first_name || 'N/A'
         });
     } catch (e) {
-        console.log('Erro ao registrar usuário:', e.message);
+        console.log('ℹ️ Aviso ao registrar usuário:', e.message);
     }
     
     const welcomeText = `
@@ -123,7 +132,6 @@ bot.on('callback_query', async (query) => {
     const chatId = query.message.chat.id;
     const data = query.data;
     
-    // Mostrar "digitando"
     bot.sendChatAction(chatId, 'typing');
     
     if (data === 'show_servers') {
@@ -132,7 +140,7 @@ bot.on('callback_query', async (query) => {
         return;
     }
     
-    // Delete server | host
+    // Delete server
     if (data.startsWith('delete_server|')) {
         const host = data.split('|')[1];
         userStates[chatId] = { action: 'confirm_delete_server', host: host };
@@ -150,16 +158,16 @@ bot.on('callback_query', async (query) => {
         return;
     }
     
-    // Confirm delete server
+    // Confirm delete
     if (data.startsWith('confirm_delete|')) {
         const host = data.split('|')[1];
         try {
             await axios.post(`${API_URL}?action=delete_server`, { host: host });
-            bot.sendMessage(chatId, `✅ <b>Servidor deletado com sucesso!</b>\n\n🌐 ${host}\n\nTodas as ${userStates[chatId]?.count || '?'} contas foram removidas.`, {
+            bot.sendMessage(chatId, `✅ <b>Servidor deletado com sucesso!</b>\n\n🌐 ${host}`, {
                 parse_mode: 'HTML'
             });
         } catch (error) {
-            bot.sendMessage(chatId, `❌ Erro ao deletar servidor: ${error.message}`, {
+            bot.sendMessage(chatId, `❌ Erro ao deletar: ${error.message}`, {
                 parse_mode: 'HTML'
             });
         }
@@ -169,7 +177,7 @@ bot.on('callback_query', async (query) => {
         return;
     }
     
-    // Select server | host | page
+    // Select server
     if (data.startsWith('select_server|')) {
         const [, host, page] = data.split('|');
         await showAccounts(chatId, host, parseInt(page));
@@ -177,7 +185,7 @@ bot.on('callback_query', async (query) => {
         return;
     }
     
-    // View account detail | id
+    // View account
     if (data.startsWith('view_account|')) {
         const id = data.split('|')[1];
         const result = await getAccountDetails(id);
@@ -192,7 +200,7 @@ bot.on('callback_query', async (query) => {
                 }
             });
         } else {
-            bot.sendMessage(chatId, '❌ Erro ao carregar dados da conta.');
+            bot.sendMessage(chatId, '❌ Erro ao carregar dados.');
         }
         
         bot.answerCallbackQuery(query.id);
@@ -217,7 +225,7 @@ async function showAccounts(chatId, host, page = 1) {
     }
     
     if (result.contas.length === 0) {
-        bot.sendMessage(chatId, `❌ Nenhuma conta encontrada para ${host}`);
+        bot.sendMessage(chatId, `❌ Nenhuma conta para ${host}`);
         return;
     }
     
@@ -226,7 +234,7 @@ async function showAccounts(chatId, host, page = 1) {
     
     const buttons = [];
     
-    result.contas.forEach((conta, index) => {
+    result.contas.forEach((conta) => {
         const expira = conta.expira ? new Date(conta.expira).toLocaleDateString('pt-BR') : '-';
         const status = conta.dias_restantes > 0 ? '✅' : '❌';
         const nomeServidor = conta.host || host;
@@ -242,7 +250,6 @@ async function showAccounts(chatId, host, page = 1) {
         }]);
     });
     
-    // Botões de paginação
     const navButtons = [];
     if (result.page > 1) {
         navButtons.push({
@@ -278,28 +285,22 @@ bot.onText(/\/ajuda/, (msg) => {
 <b>📚 AJUDA - BOT DE CONTAS IPTV</b>
 
 <b>Como usar:</b>
-1. Digite /servidores para ver lista de servidores
-2. Clique no servidor desejado
-3. Clique no ID da conta para ver detalhes completos
-4. Use "Próximo/Anterior" para paginar
+1. Digite /servidores para ver lista
+2. Clique no servidor
+3. Clique no ID da conta
+4. Use Próximo/Anterior para paginar
 
 <b>Dados exibidos:</b>
-🌐 HOST - Endereço do servidor
-👤 USER - Usuário da conta
-🔑 PASS - Senha da conta
-🔌 CON.ATIVAS - Conexões ativas
-👥 MAX.CON - Máximo de conexões
-⏱️ CRIADA - Data de criação
+🌐 HOST - Servidor
+👤 USER - Usuário
+🔑 PASS - Senha
 📆 EXPIRA - Data de expiração
 ⏰ DIAS - Dias restantes
-🔗 M3U - Link da lista
 
 <b>Comandos:</b>
 /start - Inicia o bot
 /servidores - Lista servidores
 /ajuda - Esta mensagem
-
-Dúvidas? Entre em contato com o admin! 📞
     `.trim();
     
     bot.sendMessage(chatId, helpText, {
@@ -307,15 +308,37 @@ Dúvidas? Entre em contato com o admin! 📞
     });
 });
 
+// ===================== EXPRESS ROUTES ======================
+app.get('/', (req, res) => {
+    res.json({ status: '✅ Bot rodando', timestamp: new Date() });
+});
+
+app.post(`/bot${TOKEN}`, (req, res) => {
+    bot.processUpdate(req.body);
+    res.sendStatus(200);
+});
+
+// ===================== INICIAR SERVIDOR ======================
+app.listen(PORT, () => {
+    console.log('');
+    console.log('╔═══════════════════════════════════════╗');
+    console.log('║  🤖 BOT TELEGRAM IPTV - RENDER.COM   ║');
+    console.log('╚═══════════════════════════════════════╝');
+    console.log('');
+    console.log('✅ Bot iniciado com sucesso!');
+    console.log(`📡 API URL: ${API_URL}`);
+    console.log(`🌐 Webhook URL: ${RENDER_URL}/bot${TOKEN}`);
+    console.log(`🔌 Porta: ${PORT}`);
+    console.log('');
+    console.log('Aguardando mensagens no Telegram...');
+    console.log('');
+});
+
 // ===================== TRATAMENTO DE ERROS ======================
-bot.on('polling_error', (error) => {
-    console.error('Erro no polling:', error);
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ Promise Rejeitada:', reason);
 });
 
-bot.on('error', (error) => {
-    console.error('Erro do bot:', error);
+process.on('uncaughtException', (error) => {
+    console.error('❌ Erro não capturado:', error);
 });
-
-console.log('🤖 Bot iniciado com sucesso!');
-console.log(`📡 API URL: ${API_URL}`);
-console.log('Aguardando mensagens...');
