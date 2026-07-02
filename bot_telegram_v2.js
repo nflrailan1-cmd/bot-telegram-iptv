@@ -1,32 +1,52 @@
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
-const fs = require('fs');
 
 // ===================== CONFIGURAÇÃO ======================
-const TOKEN = process.env.TELEGRAM_BOT_TOKEN || 'SEU_TOKEN_AQUI';
-const API_URL = process.env.API_URL || 'https://seu-painel.com/telegram_api.php';
-const WEBHOOK_URL = process.env.WEBHOOK_URL; // Para webhooks (gratuito em Railway, Heroku alternativas)
-const PORT = process.env.PORT || 3000;
+const TOKEN = process.env.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_TOKEN;
+const API_URL = process.env.API_URL;
 
-const bot = WEBHOOK_URL 
-    ? new TelegramBot(TOKEN, { webHook: { port: PORT, host: '0.0.0.0' } })
-    : new TelegramBot(TOKEN, { polling: true });
-
-if (WEBHOOK_URL) {
-    bot.setWebHook(`${WEBHOOK_URL}/bot${TOKEN}`);
-    console.log(`🔗 Webhook configurado: ${WEBHOOK_URL}`);
+if (!TOKEN || !API_URL) {
+    console.error('❌ TOKEN ou API_URL não configurados!');
+    process.exit(1);
 }
+
+const bot = new TelegramBot(TOKEN, { polling: true });
+
+console.log('🤖 Bot iniciado!');
+console.log('📡 API URL:', API_URL);
 
 const userStates = {};
 const adminIds = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',').map(Number) : [];
 
 // ===================== FUNÇÕES AUXILIARES ======================
+function formatarData(data) {
+    if (!data) return '-';
+    const d = new Date(data);
+    const dia = String(d.getDate()).padStart(2, '0');
+    const mes = String(d.getMonth() + 1).padStart(2, '0');
+    const ano = d.getFullYear();
+    return `${dia}/${mes}/${ano}`;
+}
+
+function calcularDias(dataExpira) {
+    if (!dataExpira) return 0;
+    const hoje = new Date();
+    const expira = new Date(dataExpira);
+    const diff = expira - hoje;
+    const dias = Math.ceil(diff / (1000 * 60 * 60 * 24));
+    return dias > 0 ? dias : 0;
+}
+
+function isAdmin(userId) {
+    return adminIds.includes(userId);
+}
+
 async function getServers() {
     try {
         const res = await axios.get(`${API_URL}?action=get_servers`);
         return res.data.servers || [];
-    } catch (error) {
-        console.error('❌ Erro ao obter servidores:', error.message);
+    } catch (e) {
+        console.error('❌ Erro ao obter servidores:', e.message);
         return [];
     }
 }
@@ -35,8 +55,8 @@ async function getAccounts(host, page = 1) {
     try {
         const res = await axios.get(`${API_URL}?action=get_accounts&host=${encodeURIComponent(host)}&page=${page}`);
         return res.data;
-    } catch (error) {
-        console.error('❌ Erro ao obter contas:', error.message);
+    } catch (e) {
+        console.error('❌ Erro ao obter contas:', e.message);
         return null;
     }
 }
@@ -45,8 +65,26 @@ async function getAccountDetails(id) {
     try {
         const res = await axios.get(`${API_URL}?action=format_account&id=${id}`);
         return res.data;
-    } catch (error) {
-        console.error('❌ Erro ao obter detalhes:', error.message);
+    } catch (e) {
+        console.error('❌ Erro ao obter detalhes:', e.message);
+        return null;
+    }
+}
+
+async function marcarEmUso(id) {
+    try {
+        const res = await axios.post(`${API_URL}?action=mark_in_use`, { id });
+        return res.data;
+    } catch (e) {
+        return null;
+    }
+}
+
+async function desmarcarEmUso(id) {
+    try {
+        const res = await axios.post(`${API_URL}?action=mark_not_in_use`, { id });
+        return res.data;
+    } catch (e) {
         return null;
     }
 }
@@ -55,9 +93,8 @@ async function deleteServer(id) {
     try {
         const res = await axios.post(`${API_URL}?action=delete_server&id=${id}`);
         return res.data;
-    } catch (error) {
-        console.error('❌ Erro ao deletar servidor:', error.message);
-        return { ok: false, erro: error.message };
+    } catch (e) {
+        return { ok: false, erro: e.message };
     }
 }
 
@@ -65,21 +102,15 @@ async function addServer(name, url) {
     try {
         const res = await axios.post(`${API_URL}?action=add_server`, { name, url });
         return res.data;
-    } catch (error) {
-        console.error('❌ Erro ao adicionar servidor:', error.message);
-        return { ok: false, erro: error.message };
+    } catch (e) {
+        return { ok: false, erro: e.message };
     }
-}
-
-function isAdmin(userId) {
-    return adminIds.includes(userId);
 }
 
 // ===================== COMANDO: START ======================
 bot.onText(/\/start/, async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id;
-    const isAdminUser = isAdmin(userId);
     
     try {
         await axios.post(`${API_URL}?action=register_user`, {
@@ -87,249 +118,72 @@ bot.onText(/\/start/, async (msg) => {
             username: msg.from.username || 'N/A',
             first_name: msg.from.first_name || 'N/A'
         });
-    } catch (e) {
-        console.log('⚠️  Aviso ao registrar usuário:', e.message);
-    }
+    } catch (e) {}
     
-    let welcomeText = `
-🎯 <b>BEM-VINDO AO BOT DE GERENCIAMENTO IPTV</b>
-
-Consulte contas IPTV por servidor e gerencie sua infraestrutura.
-
-<b>Comandos disponíveis:</b>
-/servidores - 📋 Ver lista de servidores
-/ajuda - 📚 Mostra ajuda completa
-/menu - 🎛️ Menu operacional
-    `.trim();
-
-    if (isAdminUser) {
-        welcomeText += `
-
-<b>⚙️ FUNÇÕES ADMIN:</b>
-/admin - Painel administrativo
-/adicionar - ➕ Adicionar novo servidor
-/importar - 📥 Importar servidores (arquivo)
-        `;
-    }
-
-    bot.sendMessage(chatId, welcomeText, {
-        parse_mode: 'HTML',
-        reply_markup: {
-            inline_keyboard: isAdminUser ? [
-                [{ text: '📋 Servidores', callback_data: 'show_servers' }],
-                [{ text: '⚙️ Admin', callback_data: 'admin_menu' }],
-                [{ text: '📚 Ajuda', callback_data: 'help' }]
-            ] : [
-                [{ text: '📋 Servidores', callback_data: 'show_servers' }],
-                [{ text: '📚 Ajuda', callback_data: 'help' }]
-            ]
-        }
-    });
-});
-
-// ===================== MENU OPERACIONAL ======================
-bot.onText(/\/menu/, async (msg) => {
-    const chatId = msg.chat.id;
-    const userId = msg.from.id;
-    
-    const menuText = `
-🎛️ <b>MENU OPERACIONAL</b>
-
-Escolha uma opção:
-    `.trim();
-    
-    const buttons = [
-        [{ text: '📋 Ver Servidores', callback_data: 'show_servers' }],
-        [{ text: '🔍 Buscar Conta', callback_data: 'search_account' }],
-        [{ text: '📊 Estatísticas', callback_data: 'stats' }]
-    ];
-    
+    let texto = '🎯 <b>BEM-VINDO!</b>\n\n📋 /servidores\n❓ /ajuda';
     if (isAdmin(userId)) {
-        buttons.push(
-            [{ text: '⚙️ Painel Admin', callback_data: 'admin_menu' }]
-        );
+        texto += '\n\n⚙️ /admin - Painel Admin';
     }
     
-    buttons.push([{ text: '❌ Fechar', callback_data: 'close' }]);
-    
-    bot.sendMessage(chatId, menuText, {
-        parse_mode: 'HTML',
-        reply_markup: { inline_keyboard: buttons }
-    });
-});
-
-// ===================== PAINEL ADMIN ======================
-bot.onText(/\/admin/, async (msg) => {
-    const chatId = msg.chat.id;
-    const userId = msg.from.id;
-    
-    if (!isAdmin(userId)) {
-        bot.sendMessage(chatId, '❌ Acesso negado. Apenas admins podem usar este comando.');
-        return;
-    }
-    
-    showAdminMenu(chatId);
-});
-
-async function showAdminMenu(chatId) {
-    const adminText = `
-⚙️ <b>PAINEL ADMINISTRATIVO</b>
-
-Escolha uma ação:
-    `.trim();
-    
-    bot.sendMessage(chatId, adminText, {
+    bot.sendMessage(chatId, texto, {
         parse_mode: 'HTML',
         reply_markup: {
             inline_keyboard: [
-                [{ text: '📋 Listar Servidores', callback_data: 'admin_list_servers' }],
-                [{ text: '➕ Adicionar Servidor', callback_data: 'admin_add_server' }],
-                [{ text: '🗑️ Deletar Servidor', callback_data: 'admin_delete_server' }],
-                [{ text: '📥 Importar via TXT', callback_data: 'admin_import' }],
-                [{ text: '🔙 Voltar', callback_data: 'back_to_main' }]
+                [{ text: '📋 Ver Servidores', callback_data: 'show_servers' }],
+                [{ text: '❓ Ajuda', callback_data: 'help' }]
             ]
         }
     });
-}
+});
 
-// ===================== COMANDOS ADMIN ======================
-bot.onText(/\/adicionar/, async (msg) => {
-    const chatId = msg.chat.id;
+// ===================== COMANDOS ======================
+bot.onText(/\/servidores/, async (msg) => {
+    await showServers(msg.chat.id);
+});
+
+bot.onText(/\/admin/, async (msg) => {
     const userId = msg.from.id;
-    
     if (!isAdmin(userId)) {
-        bot.sendMessage(chatId, '❌ Acesso negado.');
+        bot.sendMessage(msg.chat.id, '❌ Acesso negado.');
         return;
     }
-    
-    userStates[chatId] = { action: 'add_server_name' };
-    bot.sendMessage(chatId, '📝 Digite o <b>nome</b> do servidor:', { parse_mode: 'HTML' });
+    showAdminMenu(msg.chat.id);
+});
+
+bot.onText(/\/adicionar/, async (msg) => {
+    const userId = msg.from.id;
+    if (!isAdmin(userId)) {
+        bot.sendMessage(msg.chat.id, '❌ Acesso negado.');
+        return;
+    }
+    userStates[msg.chat.id] = { action: 'add_server_name' };
+    bot.sendMessage(msg.chat.id, '📝 Digite o <b>nome</b> do servidor:', { parse_mode: 'HTML' });
 });
 
 bot.onText(/\/importar/, async (msg) => {
-    const chatId = msg.chat.id;
     const userId = msg.from.id;
-    
     if (!isAdmin(userId)) {
-        bot.sendMessage(chatId, '❌ Acesso negado.');
+        bot.sendMessage(msg.chat.id, '❌ Acesso negado.');
         return;
     }
-    
-    bot.sendMessage(chatId, `
-📥 <b>IMPORTAR SERVIDORES</b>
-
-Envie um arquivo .txt com este formato:
-<code>
-nome_servidor1|http://url1.com
-nome_servidor2|http://url2.com
-nome_servidor3|http://url3.com
-</code>
-
-Cada linha: <b>NOME|URL</b>
-    `, {
-        parse_mode: 'HTML',
-        reply_markup: {
-            inline_keyboard: [[{ text: '❌ Cancelar', callback_data: 'close' }]]
-        }
-    });
-    
-    userStates[chatId] = { action: 'import_file' };
+    userStates[msg.chat.id] = 'awaiting_file';
+    bot.sendMessage(msg.chat.id, '📤 Envie um arquivo .TXT com as contas (NOME|URL por linha)');
 });
 
-// ===================== MENSAGENS DE TEXTO ======================
-bot.on('message', async (msg) => {
-    if (msg.text && msg.text.startsWith('/')) return; // Ignorar comandos
-    
-    const chatId = msg.chat.id;
-    const userId = msg.from.id;
-    const state = userStates[chatId];
-    
-    if (!state) return;
-    
-    // Adicionar servidor - Etapa 1: Nome
-    if (state.action === 'add_server_name') {
-        userStates[chatId] = { 
-            action: 'add_server_url',
-            name: msg.text
-        };
-        bot.sendMessage(chatId, '🔗 Agora digite a <b>URL</b> do servidor:', { parse_mode: 'HTML' });
-        return;
-    }
-    
-    // Adicionar servidor - Etapa 2: URL
-    if (state.action === 'add_server_url') {
-        if (!isAdmin(userId)) {
-            bot.sendMessage(chatId, '❌ Acesso negado.');
-            delete userStates[chatId];
-            return;
-        }
-        
-        const result = await addServer(state.name, msg.text);
-        delete userStates[chatId];
-        
-        if (result.ok) {
-            bot.sendMessage(chatId, `✅ Servidor <b>"${state.name}"</b> adicionado com sucesso!`, { parse_mode: 'HTML' });
-        } else {
-            bot.sendMessage(chatId, `❌ Erro: ${result.erro || 'Erro desconhecido'}`, { parse_mode: 'HTML' });
-        }
-        return;
-    }
-});
+bot.onText(/\/ajuda/, (msg) => {
+    const helpText = `<b>📚 AJUDA</b>
 
-// ===================== ARQUIVO - IMPORTAÇÃO ======================
-bot.on('document', async (msg) => {
-    const chatId = msg.chat.id;
-    const userId = msg.from.id;
-    const state = userStates[chatId];
-    
-    if (!state || state.action !== 'import_file') return;
-    if (!isAdmin(userId)) {
-        bot.sendMessage(chatId, '❌ Acesso negado.');
-        return;
-    }
-    
-    if (!msg.document.file_name.endsWith('.txt')) {
-        bot.sendMessage(chatId, '❌ Envie um arquivo .txt');
-        return;
-    }
-    
-    try {
-        const file = await bot.getFile(msg.document.file_id);
-        const fileStream = await axios.get(`https://api.telegram.org/file/bot${TOKEN}/${file.file_path}`, 
-            { responseType: 'arraybuffer' });
-        
-        const content = fileStream.data.toString('utf-8');
-        const lines = content.split('\n').filter(line => line.trim());
-        
-        let importCount = 0;
-        let errorCount = 0;
-        
-        bot.sendMessage(chatId, `⏳ Importando ${lines.length} servidores...`);
-        
-        for (const line of lines) {
-            const [name, url] = line.split('|').map(s => s.trim());
-            
-            if (name && url) {
-                const result = await addServer(name, url);
-                if (result.ok) {
-                    importCount++;
-                } else {
-                    errorCount++;
-                }
-            }
-        }
-        
-        delete userStates[chatId];
-        bot.sendMessage(chatId, `
-✅ <b>IMPORTAÇÃO CONCLUÍDA</b>
+<b>Comandos Públicos:</b>
+/start - Menu inicial
+/servidores - Ver servidores
+/ajuda - Esta mensagem
 
-✔️ Adicionados: ${importCount}
-❌ Erros: ${errorCount}
-        `, { parse_mode: 'HTML' });
-        
-    } catch (error) {
-        bot.sendMessage(chatId, `❌ Erro ao processar arquivo: ${error.message}`);
-    }
+<b>Comandos Admin:</b>
+/admin - Painel administrativo
+/adicionar - Adicionar servidor
+/importar - Importar de arquivo .txt`;
+    
+    bot.sendMessage(msg.chat.id, helpText, { parse_mode: 'HTML' });
 });
 
 // ===================== CALLBACKS ======================
@@ -340,127 +194,44 @@ bot.on('callback_query', async (query) => {
     
     bot.sendChatAction(chatId, 'typing');
     
-    // Menu principal
     if (data === 'show_servers') {
-        await showServersCallback(chatId);
-        bot.answerCallbackQuery(query.id);
-        return;
-    }
-    
-    if (data === 'help') {
-        showHelp(chatId);
-        bot.answerCallbackQuery(query.id);
-        return;
-    }
-    
-    if (data === 'admin_menu') {
+        await showServers(chatId);
+    } else if (data === 'help') {
+        const helpText = `<b>📚 AJUDA</b>
+
+<b>Como usar:</b>
+1. /servidores - Ver lista
+2. Clique no servidor
+3. Clique no ID da conta
+4. Veja dados completos`;
+        bot.sendMessage(chatId, helpText, { parse_mode: 'HTML' });
+    } else if (data === 'admin_menu') {
         if (!isAdmin(userId)) {
-            bot.answerCallbackQuery(query.id, { text: '❌ Acesso negado', show_alert: true });
+            bot.answerCallbackQuery(query.id, '❌ Acesso negado', true);
             return;
         }
         showAdminMenu(chatId);
-        bot.answerCallbackQuery(query.id);
-        return;
-    }
-    
-    if (data === 'back_to_main') {
-        const mainText = `🏠 <b>MENU PRINCIPAL</b>`;
-        bot.editMessageText(mainText, {
-            chat_id: chatId,
-            message_id: query.message.message_id,
-            parse_mode: 'HTML',
-            reply_markup: {
-                inline_keyboard: [
-                    [{ text: '📋 Servidores', callback_data: 'show_servers' }],
-                    [{ text: '⚙️ Admin', callback_data: 'admin_menu' }],
-                    [{ text: '📚 Ajuda', callback_data: 'help' }]
-                ]
-            }
-        });
-        bot.answerCallbackQuery(query.id);
-        return;
-    }
-    
-    // Admin Actions
-    if (data === 'admin_list_servers') {
+    } else if (data === 'admin_add_server') {
         if (!isAdmin(userId)) {
-            bot.answerCallbackQuery(query.id, { text: '❌ Acesso negado', show_alert: true });
-            return;
-        }
-        await showAdminServersCallback(chatId);
-        bot.answerCallbackQuery(query.id);
-        return;
-    }
-    
-    if (data === 'admin_add_server') {
-        if (!isAdmin(userId)) {
-            bot.answerCallbackQuery(query.id, { text: '❌ Acesso negado', show_alert: true });
+            bot.answerCallbackQuery(query.id, '❌ Acesso negado', true);
             return;
         }
         userStates[chatId] = { action: 'add_server_name' };
         bot.sendMessage(chatId, '📝 Digite o <b>nome</b> do servidor:', { parse_mode: 'HTML' });
-        bot.answerCallbackQuery(query.id);
-        return;
-    }
-    
-    if (data === 'admin_delete_server') {
+    } else if (data === 'admin_delete_server') {
         if (!isAdmin(userId)) {
-            bot.answerCallbackQuery(query.id, { text: '❌ Acesso negado', show_alert: true });
+            bot.answerCallbackQuery(query.id, '❌ Acesso negado', true);
             return;
         }
-        await showDeleteServersCallback(chatId);
-        bot.answerCallbackQuery(query.id);
-        return;
-    }
-    
-    if (data === 'admin_import') {
+        await showDeleteServers(chatId);
+    } else if (data.startsWith('delete_server|')) {
         if (!isAdmin(userId)) {
-            bot.answerCallbackQuery(query.id, { text: '❌ Acesso negado', show_alert: true });
-            return;
-        }
-        userStates[chatId] = { action: 'import_file' };
-        bot.sendMessage(chatId, `
-📥 <b>IMPORTAR SERVIDORES</b>
-
-Envie um arquivo .txt com este formato:
-<code>
-nome_servidor1|http://url1.com
-nome_servidor2|http://url2.com
-</code>
-        `, { parse_mode: 'HTML' });
-        bot.answerCallbackQuery(query.id);
-        return;
-    }
-    
-    // Delete server
-    if (data.startsWith('confirm_delete|')) {
-        if (!isAdmin(userId)) {
-            bot.answerCallbackQuery(query.id, { text: '❌ Acesso negado', show_alert: true });
-            return;
-        }
-        const serverId = data.split('|')[1];
-        const result = await deleteServer(serverId);
-        
-        if (result.ok) {
-            bot.editMessageText(
-                `✅ Servidor deletado com sucesso!`,
-                { chat_id: chatId, message_id: query.message.message_id }
-            );
-        } else {
-            bot.sendMessage(chatId, `❌ Erro: ${result.erro || 'Erro ao deletar'}`);
-        }
-        bot.answerCallbackQuery(query.id);
-        return;
-    }
-    
-    if (data.startsWith('delete_server|')) {
-        if (!isAdmin(userId)) {
-            bot.answerCallbackQuery(query.id, { text: '❌ Acesso negado', show_alert: true });
+            bot.answerCallbackQuery(query.id, '❌ Acesso negado', true);
             return;
         }
         const serverId = data.split('|')[1];
         bot.editMessageText(
-            `⚠️ Deletar servidor? Esta ação é irreversível!`,
+            '⚠️ Deletar servidor? (Irreversível)',
             {
                 chat_id: chatId,
                 message_id: query.message.message_id,
@@ -474,232 +245,251 @@ nome_servidor2|http://url2.com
                 }
             }
         );
-        bot.answerCallbackQuery(query.id);
-        return;
-    }
-    
-    // Servidores normais
-    if (data.startsWith('select_server|')) {
+    } else if (data.startsWith('confirm_delete|')) {
+        if (!isAdmin(userId)) {
+            bot.answerCallbackQuery(query.id, '❌ Acesso negado', true);
+            return;
+        }
+        const serverId = data.split('|')[1];
+        const result = await deleteServer(serverId);
+        
+        if (result.ok) {
+            bot.editMessageText('✅ Servidor deletado!', {
+                chat_id: chatId,
+                message_id: query.message.message_id
+            });
+        } else {
+            bot.sendMessage(chatId, `❌ Erro: ${result.erro}`);
+        }
+    } else if (data.startsWith('select_server|')) {
         const [, host, page] = data.split('|');
         await showAccounts(chatId, host, parseInt(page));
-        bot.answerCallbackQuery(query.id);
-        return;
-    }
-    
-    if (data.startsWith('view_account|')) {
+    } else if (data.startsWith('view_account|')) {
         const id = data.split('|')[1];
         const result = await getAccountDetails(id);
         
         if (result && result.ok) {
-            bot.sendMessage(chatId, result.mensagem, {
-                parse_mode: 'HTML',
-                reply_markup: {
-                    inline_keyboard: [[
-                        { text: '◀️ Voltar', callback_data: `select_server|${result.conta.host}|1` }
-                    ]]
-                }
-            });
-        } else {
-            bot.sendMessage(chatId, '❌ Erro ao carregar dados da conta.');
+            const c = result.conta;
+            const dataExp = formatarData(c.expira);
+            const dataCria = formatarData(c.criada);
+            const dias = calcularDias(c.expira);
+            const emUso = c.in_use ? '✅ SIM' : '❌ NÃO';
+            
+            const msg = `<b>📌 ID:</b> <code>${c.id}</code>\n\n<b>🌐 HOST:</b> <code>${c.host}</code>\n<b>👤 USER:</b> <code>${c.username}</code>\n<b>🔑 PASS:</b> <code>${c.password}</code>\n\n<b>⏱️ CRIADA:</b> ${dataCria}\n<b>📆 EXPIRA:</b> ${dataExp}\n<b>⏰ DIAS:</b> <b>${dias}</b>\n\n<b>🔌 ATIVAS:</b> ${c.con_ativas}/${c.max_con}\n\n<b>📱 EM USO:</b> ${emUso}\n\n<b>🔗 M3U:</b>\n<code>${c.m3u_url || 'N/A'}</code>`;
+            
+            const botoes = [[{ text: '◀️ Voltar', callback_data: `select_server|${c.host}|1` }]];
+            
+            if (c.in_use) {
+                botoes.push([{ text: '🔴 Desmarcar Uso', callback_data: `toggle_in_use|${c.id}|${c.host}` }]);
+            } else {
+                botoes.push([{ text: '🟢 Marcar Uso', callback_data: `toggle_in_use|${c.id}|${c.host}` }]);
+            }
+            
+            bot.sendMessage(chatId, msg, { parse_mode: 'HTML', reply_markup: { inline_keyboard: botoes } });
         }
-        bot.answerCallbackQuery(query.id);
-        return;
-    }
-    
-    if (data.startsWith('page|')) {
+    } else if (data.startsWith('toggle_in_use|')) {
+        const [, id, host] = data.split('|');
+        const result = await getAccountDetails(id);
+        
+        if (result && result.ok) {
+            const c = result.conta;
+            if (c.in_use) {
+                await desmarcarEmUso(id);
+            } else {
+                await marcarEmUso(id);
+            }
+            bot.answerCallbackQuery(query.id, '✅ Status atualizado!', true);
+        }
+    } else if (data.startsWith('page|')) {
         const [, host, page] = data.split('|');
         await showAccounts(chatId, host, parseInt(page));
-        bot.answerCallbackQuery(query.id);
-        return;
     }
     
-    if (data === 'close') {
-        bot.deleteMessage(chatId, query.message.message_id).catch(() => {});
-        bot.answerCallbackQuery(query.id);
-        return;
+    bot.answerCallbackQuery(query.id);
+});
+
+// ===================== MENSAGENS DE TEXTO ======================
+bot.on('message', async (msg) => {
+    if (msg.text && msg.text.startsWith('/')) return;
+    
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+    const state = userStates[chatId];
+    
+    if (!state) return;
+    
+    if (state.action === 'add_server_name') {
+        userStates[chatId] = { action: 'add_server_url', name: msg.text };
+        bot.sendMessage(chatId, '🔗 Digite a <b>URL</b> do servidor:', { parse_mode: 'HTML' });
+    } else if (state.action === 'add_server_url') {
+        if (!isAdmin(userId)) {
+            bot.sendMessage(chatId, '❌ Acesso negado.');
+            delete userStates[chatId];
+            return;
+        }
+        
+        const result = await addServer(state.name, msg.text);
+        delete userStates[chatId];
+        
+        if (result.ok) {
+            bot.sendMessage(chatId, `✅ Servidor <b>"${state.name}"</b> adicionado!`, { parse_mode: 'HTML' });
+        } else {
+            bot.sendMessage(chatId, `❌ Erro: ${result.erro}`, { parse_mode: 'HTML' });
+        }
     }
 });
 
-// ===================== FUNÇÕES DE CALLBACK ======================
-async function showServersCallback(chatId) {
+// ===================== PROCESSAMENTO DE ARQUIVO ======================
+bot.on('document', async (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+    const fileId = msg.document.file_id;
+    const fileName = msg.document.file_name || 'arquivo';
+    
+    if (userStates[chatId] !== 'awaiting_file') {
+        bot.sendMessage(chatId, '❌ Use /importar para fazer upload');
+        return;
+    }
+    
+    if (!isAdmin(userId)) {
+        bot.sendMessage(chatId, '❌ Acesso negado.');
+        return;
+    }
+    
+    if (!fileName.toLowerCase().endsWith('.txt')) {
+        bot.sendMessage(chatId, '❌ Envie apenas arquivo .TXT');
+        return;
+    }
+    
+    try {
+        bot.sendMessage(chatId, '⏳ Processando...');
+        
+        const fileStream = await bot.getFileStream(fileId);
+        let fileContent = '';
+        
+        fileStream.on('data', (chunk) => {
+            fileContent += chunk.toString();
+        });
+        
+        fileStream.on('end', async () => {
+            const linhas = fileContent.split('\n').filter(l => l.trim());
+            let adicionadas = 0;
+            let erros = 0;
+            
+            for (const linha of linhas) {
+                const [name, url] = linha.split('|').map(s => s.trim());
+                if (name && url) {
+                    const result = await addServer(name, url);
+                    if (result.ok) adicionadas++;
+                    else erros++;
+                }
+            }
+            
+            bot.sendMessage(chatId, `✅ <b>IMPORTAÇÃO CONCLUÍDA!</b>\n\n📊 Adicionadas: ${adicionadas}\n❌ Erros: ${erros}`, {
+                parse_mode: 'HTML',
+                reply_markup: { inline_keyboard: [[{ text: '📋 Ver Servidores', callback_data: 'show_servers' }]] }
+            });
+            
+            delete userStates[chatId];
+        });
+        
+        fileStream.on('error', (err) => {
+            bot.sendMessage(chatId, `❌ Erro: ${err.message}`);
+            delete userStates[chatId];
+        });
+        
+    } catch (e) {
+        bot.sendMessage(chatId, `❌ Erro: ${e.message}`);
+        delete userStates[chatId];
+    }
+});
+
+// ===================== FUNÇÕES DE EXIBIÇÃO ======================
+async function showServers(chatId) {
     const servers = await getServers();
     
-    if (servers.length === 0) {
+    if (!servers.length) {
         bot.sendMessage(chatId, '❌ Nenhum servidor encontrado.');
         return;
     }
     
-    let text = `📡 <b>SERVIDORES DISPONÍVEIS:</b>\n\n`;
+    let text = '📡 <b>SERVIDORES:</b>\n\n';
     const buttons = [];
     
-    servers.forEach((server) => {
-        text += `🔗 ${server.host}\n`;
-        buttons.push([{
-            text: `📋 Ver Contas - ${server.host}`,
-            callback_data: `select_server|${server.host}|1`
-        }]);
+    servers.forEach(s => {
+        text += `🔗 ${s.host}\n`;
+        buttons.push([{ text: `📋 ${s.host}`, callback_data: `select_server|${s.host}|1` }]);
     });
     
-    buttons.push([{ text: '🏠 Menu', callback_data: 'back_to_main' }]);
-    
-    bot.sendMessage(chatId, text, {
-        parse_mode: 'HTML',
-        reply_markup: { inline_keyboard: buttons }
-    });
-}
-
-async function showAdminServersCallback(chatId) {
-    const servers = await getServers();
-    
-    if (servers.length === 0) {
-        bot.sendMessage(chatId, '❌ Nenhum servidor encontrado.');
-        return;
-    }
-    
-    let text = `📋 <b>SERVIDORES CADASTRADOS:</b>\n\n`;
-    
-    servers.forEach((server, index) => {
-        text += `${index + 1}. <b>${server.host}</b> - ${server.count} contas\n`;
-    });
-    
-    bot.sendMessage(chatId, text, {
-        parse_mode: 'HTML',
-        reply_markup: {
-            inline_keyboard: [[{ text: '🔙 Voltar', callback_data: 'admin_menu' }]]
-        }
-    });
-}
-
-async function showDeleteServersCallback(chatId) {
-    const servers = await getServers();
-    
-    if (servers.length === 0) {
-        bot.sendMessage(chatId, '❌ Nenhum servidor para deletar.');
-        return;
-    }
-    
-    let text = `🗑️ <b>DELETAR SERVIDOR</b>\n\nEscolha qual deletar:\n\n`;
-    const buttons = [];
-    
-    servers.forEach((server) => {
-        text += `• ${server.host}\n`;
-        buttons.push([{
-            text: `🗑️ ${server.host}`,
-            callback_data: `delete_server|${server.id}`
-        }]);
-    });
-    
-    buttons.push([[{ text: '🔙 Voltar', callback_data: 'admin_menu' }]]);
-    
-    bot.sendMessage(chatId, text, {
-        parse_mode: 'HTML',
-        reply_markup: { inline_keyboard: buttons }
-    });
+    bot.sendMessage(chatId, text, { parse_mode: 'HTML', reply_markup: { inline_keyboard: buttons } });
 }
 
 async function showAccounts(chatId, host, page = 1) {
     const result = await getAccounts(host, page);
     
-    if (!result || !result.ok) {
+    if (!result) {
         bot.sendMessage(chatId, '❌ Erro ao carregar contas.');
         return;
     }
     
-    if (result.contas.length === 0) {
-        bot.sendMessage(chatId, `❌ Nenhuma conta encontrada para ${host}`);
+    if (!result.contas.length) {
+        bot.sendMessage(chatId, `❌ Sem contas em ${host}`);
         return;
     }
     
-    let text = `🌐 <b>SERVIDOR:</b> ${host}\n`;
-    text += `📊 Página ${result.page} de ${result.pages}\n\n`;
-    
+    let text = `🌐 <b>${host}</b>\n📊 Página ${result.page}/${result.pages}\n\n`;
     const buttons = [];
     
-    result.contas.forEach((conta) => {
-        const expira = conta.expira ? new Date(conta.expira).toLocaleDateString('pt-BR') : '-';
-        const status = conta.dias_restantes > 0 ? '✅' : '❌';
-        
-        text += `${status} <b>#${conta.id}</b> | ${conta.username}\n`;
-        text += `   Exp: ${expira} | Con: ${conta.con_ativas}/${conta.max_con}\n\n`;
-        
-        buttons.push([{
-            text: `📌 #${conta.id}`,
-            callback_data: `view_account|${conta.id}`
-        }]);
+    result.contas.forEach(c => {
+        const exp = formatarData(c.expira);
+        const dias = calcularDias(c.expira);
+        const status = dias > 0 ? '✅' : '❌';
+        const emUso = c.in_use ? '📱' : '  ';
+        text += `${status} ${emUso} #${c.id} | ${exp} | ${dias}d\n`;
+        buttons.push([{ text: `📌 #${c.id}`, callback_data: `view_account|${c.id}` }]);
     });
     
-    const navButtons = [];
-    if (result.page > 1) {
-        navButtons.push({
-            text: '⬅️',
-            callback_data: `page|${host}|${result.page - 1}`
-        });
-    }
-    if (result.page < result.pages) {
-        navButtons.push({
-            text: '➡️',
-            callback_data: `page|${host}|${result.page + 1}`
-        });
-    }
-    navButtons.push({
-        text: '🏠',
-        callback_data: 'show_servers'
-    });
+    const nav = [];
+    if (result.page > 1) nav.push({ text: '⬅️', callback_data: `page|${host}|${result.page - 1}` });
+    if (result.page < result.pages) nav.push({ text: '➡️', callback_data: `page|${host}|${result.page + 1}` });
+    nav.push({ text: '🏠', callback_data: 'show_servers' });
+    buttons.push(nav);
     
-    buttons.push(navButtons);
+    bot.sendMessage(chatId, text, { parse_mode: 'HTML', reply_markup: { inline_keyboard: buttons } });
+}
+
+function showAdminMenu(chatId) {
+    const text = '⚙️ <b>PAINEL ADMIN</b>\n\nEscolha uma ação:';
     
     bot.sendMessage(chatId, text, {
         parse_mode: 'HTML',
-        reply_markup: { inline_keyboard: buttons }
+        reply_markup: {
+            inline_keyboard: [
+                [{ text: '➕ Adicionar', callback_data: 'admin_add_server' }],
+                [{ text: '🗑️ Deletar', callback_data: 'admin_delete_server' }]
+            ]
+        }
     });
 }
 
-function showHelp(chatId) {
-    const helpText = `
-<b>📚 AJUDA - BOT DE GERENCIAMENTO IPTV</b>
-
-<b>PARA TODOS:</b>
-/start - Inicia o bot
-/menu - Menu operacional
-/servidores - Ver lista de servidores
-/ajuda - Esta mensagem
-
-<b>VISUALIZAÇÃO:</b>
-1. Clique em um servidor
-2. Veja a lista de contas com paginação
-3. Clique no ID da conta para detalhes completos
-
-<b>Dados exibidos:</b>
-🌐 HOST | 👤 USER | 🔑 PASS
-🔌 CONEXÕES ATIVAS | ⏰ DIAS RESTANTES
-📆 EXPIRA | 🔗 M3U
-
-<b>⚙️ FUNÇÕES ADMIN (se autorizado):</b>
-/admin - Painel administrativo
-/adicionar - Adicionar novo servidor
-/importar - Importar de arquivo .txt
-/menu - Menu com opção de deletar
-
-<b>Formato de importação (TXT):</b>
-<code>
-servidor1|http://url1.com
-servidor2|http://url2.com
-</code>
-    `.trim();
+async function showDeleteServers(chatId) {
+    const servers = await getServers();
     
-    bot.sendMessage(chatId, helpText, { parse_mode: 'HTML' });
+    if (!servers.length) {
+        bot.sendMessage(chatId, '❌ Sem servidores.');
+        return;
+    }
+    
+    let text = '🗑️ <b>DELETAR SERVIDOR:</b>\n\n';
+    const buttons = [];
+    
+    servers.forEach(s => {
+        text += `• ${s.host}\n`;
+        buttons.push([{ text: `🗑️ ${s.host}`, callback_data: `delete_server|${s.id}` }]);
+    });
+    
+    bot.sendMessage(chatId, text, { parse_mode: 'HTML', reply_markup: { inline_keyboard: buttons } });
 }
 
-// ===================== ERROS ======================
-bot.on('polling_error', (error) => {
-    console.error('❌ Erro no polling:', error);
-});
-
-bot.on('error', (error) => {
-    console.error('❌ Erro do bot:', error);
-});
-
-console.log('✅ Bot iniciado com sucesso!');
-console.log(`🔗 Modo: ${WEBHOOK_URL ? 'Webhook' : 'Polling'}`);
-console.log(`📡 API URL: ${API_URL}`);
-console.log(`👮 Admins configurados: ${adminIds.length > 0 ? adminIds.join(', ') : 'nenhum'}`);
+// ===================== INICIALIZAÇÃO ======================
+console.log('✅ Bot aguardando mensagens...');
