@@ -93,6 +93,15 @@ async function importarArquivo(fileContent) {
     }
 }
 
+async function deletarServidor(host) {
+    try {
+        const res = await axios.post(`${API_URL}?action=delete_server`, { host });
+        return res.data;
+    } catch (e) {
+        return { ok: false, erro: e.message };
+    }
+}
+
 bot.onText(/\/start/, async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id;
@@ -142,7 +151,10 @@ async function showServers(chatId) {
     
     servers.forEach(s => {
         text += `${s.host} (${s.count})\n`;
-        buttons.push([{ text: s.host, callback_data: `select_server|${s.host}|1` }]);
+        buttons.push([
+            { text: s.host, callback_data: `select_server|${s.host}|1` },
+            { text: '🗑️', callback_data: `confirm_delete|${s.host}` }
+        ]);
     });
     
     bot.sendMessage(chatId, text, { parse_mode: 'HTML', reply_markup: { inline_keyboard: buttons } });
@@ -214,9 +226,30 @@ bot.on('callback_query', async (query) => {
     } else if (data.startsWith('page|')) {
         const [, host, page] = data.split('|');
         await showAccounts(chatId, host, parseInt(page));
+    } else if (data.startsWith('confirm_delete|')) {
+        const host = data.split('|')[1];
+        bot.sendMessage(chatId, `⚠️ <b>DELETAR SERVIDOR?</b>\n\n${host}\n\nEsta ação é irreversível!`, {
+            parse_mode: 'HTML',
+            reply_markup: {
+                inline_keyboard: [
+                    [
+                        { text: '✅ Sim, deletar', callback_data: `delete_server|${host}` },
+                        { text: '❌ Cancelar', callback_data: 'show_servers' }
+                    ]
+                ]
+            }
+        });
+    } else if (data.startsWith('delete_server|')) {
+        const host = data.split('|')[1];
+        const resultado = await deletarServidor(host);
+        
+        if (resultado.ok) {
+            bot.sendMessage(chatId, `✅ <b>SERVIDOR DELETADO!</b>\n\n${host}`, { parse_mode: 'HTML' });
+            await showServers(chatId);
+        } else {
+            bot.sendMessage(chatId, `❌ Erro: ${resultado.erro}`);
+        }
     }
-    
-    bot.answerCallbackQuery(query.id);
 });
 
 async function showAccounts(chatId, host, page = 1) {
