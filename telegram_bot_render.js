@@ -146,34 +146,24 @@ bot.onText(/\/ajuda/, (msg) => {
 });
 
 async function showServers(chatId) {
-    try {
-        console.log('🔍 Iniciando showServers para chatId:', chatId);
-        const servers = await getServers();
-        console.log('📊 Servidores recebidos:', servers);
-        
-        if (!servers || servers.length === 0) {
-            console.log('⚠️ Sem servidores encontrados');
-            bot.sendMessage(chatId, '❌ Sem servidores');
-            return;
-        }
-        
-        let text = '📡 <b>SERVIDORES:</b>\n\n';
-        const buttons = [];
-        
-        servers.forEach(s => {
-            text += `${s.host} (${s.count})\n`;
-            buttons.push([
-                { text: s.host, callback_data: `select_server|${s.host}|1` },
-                { text: '✖', callback_data: `confirm_delete|${s.host}` }
-            ]);
-        });
-        
-        console.log('📤 Enviando mensagem com', servers.length, 'servidores');
-        bot.sendMessage(chatId, text, { parse_mode: 'HTML', reply_markup: { inline_keyboard: buttons } });
-    } catch (e) {
-        console.error('❌ Erro em showServers:', e.message);
-        bot.sendMessage(chatId, '❌ Erro ao buscar servidores');
+    const servers = await getServers();
+    if (!servers.length) {
+        bot.sendMessage(chatId, '❌ Sem servidores');
+        return;
     }
+    
+    let text = '📡 <b>SERVIDORES:</b>\n\n';
+    const buttons = [];
+    
+    servers.forEach(s => {
+        text += `${s.host} (${s.count})\n`;
+        buttons.push([
+            { text: s.host, callback_data: `select_server|${s.host}|1` },
+            { text: '🗑️', callback_data: `confirm_delete|${s.host}` }
+        ]);
+    });
+    
+    bot.sendMessage(chatId, text, { parse_mode: 'HTML', reply_markup: { inline_keyboard: buttons } });
 }
 
 bot.on('callback_query', async (query) => {
